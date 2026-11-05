@@ -2,7 +2,7 @@
 
 The `evidence/` directory holds the artifacts of real LabProof runs made on the author's machine with Docker Engine in a Debian WSL distribution. Every directory re-verifies offline, without Docker: `python -m labproof verify-artifacts evidence/local-python-01`. Hashes are unsigned: they show that the files are consistent with each other, not that the runs happened as described.
 
-Only purpose-built synthetic fixtures are in scope. No external-target testing and no paid model or search calls were performed. The author authorized project dependencies, Docker Engine in an existing Debian WSL distribution and pinned worker-image provisioning.
+Only purpose-built synthetic fixtures are in scope. No external-target testing was performed, and the container runs made no model or search calls (the live remediation brief below is the only record that did). The author authorized project dependencies, Docker Engine in an existing Debian WSL distribution and pinned worker-image provisioning.
 
 Unsigned artifact hashes establish consistency, not authenticity. Reexecution plus host control rules is not a separate human/model audit. Canary results establish tested controls, not immunity to container escapes.
 
@@ -29,3 +29,7 @@ Actual canaries checked UID/GID 65532, zero capabilities, no-new-privileges, loo
 ## Fixed-v2 runtime acceptance
 
 [`evidence/fixed-v2-runtime-01/`](../evidence/fixed-v2-runtime-01) records an installed fixed-v2 candidate: 32 fresh verified executions, eight each for Python, native Node tests, GCC and offline Cargo, with alpha confirmed, beta rejected, gamma rejected and delta inconclusive. It is acceptance of that dated source revision, not of any later change; see [V2-CONTRACT.md](V2-CONTRACT.md#recorded-installed-fixed-v2-acceptance).
+
+## Live remediation brief
+
+[`evidence/live-brief-01/`](../evidence/live-brief-01) holds four briefs made by `labproof brief --live` from the retained Python run, with real Tavily searches and a local model reached through a Bifrost gateway: two final runs (direct search and relay search), both `sourced`, and two earlier attempts that failed in recorded ways (a gateway timeout and an unclosed JSON reply). Each verifies with `python -m labproof verify-brief evidence/local-python-01 <directory>`. See its [README](../evidence/live-brief-01/README.md) and [BRIEF.md](BRIEF.md).

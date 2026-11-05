@@ -4,7 +4,7 @@
 
 LabProof answers one narrow question honestly: *did this program really leak data, and do we have the evidence to say so?* It runs purpose-built vulnerable and corrected program pairs (Python, TypeScript, C and Rust) in locked-down containers, records what they return, and reports each finding as **confirmed**, **rejected** or **inconclusive** only when the positive observations, the normal-use controls and the corrected-twin controls all agree, twice, in fresh containers. Every run is written as hash-registered artifacts that anyone can re-verify offline.
 
-It is a bounded harness, not a scanner and not an autonomous pentesting agent: there is no input for a URL, host, port, header, payload or command, and nothing outside the fixed synthetic fixtures can be reached. Python 3.12+, standard library only, no credentials, no network and no model calls.
+It is a bounded harness, not a scanner and not an autonomous pentesting agent: there is no input for a URL, host, port, header, payload or command, and nothing outside the fixed synthetic fixtures can be reached. Python 3.12+, standard library only. Every default command is offline and needs no credentials; the one network path is the opt-in `brief --live`, described under [Bifrost and Tavily](#bifrost-and-tavily-the-sourced-remediation-brief).
 
 ![LabProof viewer showing five verified runs: a replay and four real container runs](docs/screenshots/viewer-overview.png)
 
@@ -17,6 +17,7 @@ It is a bounded harness, not a scanner and not an autonomous pentesting agent: t
 - **Real container runs for four languages.** `assess --mode local` executes the fixed fixtures through a reviewed Docker controller after fresh containment canaries: network none, non-root, read-only root, no host mounts, dropped capabilities, bounded memory, processes, time and output, fresh container per execution, owned-container removal confirmed. There is no host-execution fallback.
 - **Tamper-checked artifacts.** `verify-artifacts` re-derives the verdicts from the captured bytes without running anything and rejects altered, missing, unregistered or unsafe files.
 - **A bounded experiment planner** that ranks which declared read-only experiment to run next by expected information gain minus cost, and discards untrusted observations. It runs no tool and uses no model.
+- **A sourced remediation brief** (`brief`, `verify-brief`): fix guidance for each confirmed finding class, backed by current OWASP and CWE pages fetched with Tavily and drafted by a model behind a Bifrost gateway. LabProof keeps the findings, queries and severities, and keeps a piece of advice only if its quotations occur word for word in a retrieved excerpt. `--demo` is offline; `--live` needs explicit consent. See [docs/BRIEF.md](docs/BRIEF.md).
 - **A read-only viewer** (`viewer/`) for exported bundles: results, evidence ledger, run trace, original reports, interpretation boundaries.
 
 ## Quick start
@@ -30,6 +31,8 @@ python -m pip install .
 python -m labproof demo --output runs/demo                 # frozen synthetic replay, offline
 python -m labproof verify-artifacts runs/demo
 python -m labproof export-viewer runs/demo --output runs/demo-viewer.json
+python -m labproof brief runs/demo --demo --output runs/demo-brief     # scripted providers and invented excerpts, offline
+python -m labproof verify-brief runs/demo runs/demo-brief
 python -m labproof doctor
 ```
 
@@ -86,20 +89,33 @@ python -m labproof verify-planner-evaluation runs/planner-eval
 
 `verify-artifacts` makes no model call, network operation or catalogue replay. It checks the envelope, payload lengths and digests, the exact registered file set, safe relative paths (no symlinks or reparse points, no reserved names), bounds, duplicate JSON keys, unique IDs, evidence linkage and source snapshot hashes; it re-derives the verdicts from the captured content; and it checks event order and completion markers. Hashes are unsigned: someone who rewrites a coherent fixture, report, events and manifest can build another valid bundle, so this establishes consistency, not authenticity or that a target was isolated. See [docs/ARTIFACT-CONTRACT.md](docs/ARTIFACT-CONTRACT.md) and [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
-## Models and Bifrost
+## Bifrost and Tavily: the sourced remediation brief
 
-LabProof makes no model calls today. [`src/labproof/inference.py`](src/labproof/inference.py) is a single-use, mock-tested boundary through which a model could propose one of the declared synthetic operations via a Bifrost gateway; it cannot run anything, authorize execution or promote evidence, and its live path is deliberately blocked until the ambient-header isolation issue described in [docs/INFERENCE.md](docs/INFERENCE.md) is resolved. No live Bifrost behaviour has been tested.
+A verified run says *what* was confirmed. `brief` adds *how to fix it, with sources*. For each confirmed finding class it asks [Tavily](https://tavily.com) (a fixed query, restricted to `owasp.org` and `cwe.mitre.org`) for current guidance, sends the retrieved excerpts and a fixed one-sentence description of the class to a model through a [Bifrost](https://github.com/maximhq/bifrost) gateway, and keeps only the recommendations whose quotations occur verbatim in a retrieved excerpt. LabProof decides the findings, queries, domains and severities; the model's text is labelled model-generated and cannot change a finding. The output is `brief.json` and a static `brief.html`, which `verify-brief` re-checks offline against the source run.
+
+```bash
+export BIFROST_VIRTUAL_KEY=...  TAVILY_API_KEY=...        # or --search-relay NAME and keep the Tavily key in the gateway
+python -m labproof brief evidence/local-python-01 --live --confirm-outbound \
+    --gateway-url http://127.0.0.1:8080 --model ollama/qwen2.5:3b \
+    --gateway-token-env BIFROST_VIRTUAL_KEY --tavily-key-env TAVILY_API_KEY --output runs/python-brief
+python -m labproof verify-brief evidence/local-python-01 runs/python-brief
+```
+
+Only the fixed queries and public excerpts leave the machine: no run path or ID, evidence, response body or credential is sent, and `--live` refuses to start without `--confirm-outbound`. Every other command stays offline. `scripts/live-brief/run.sh` reproduces the live set-up with a pinned Bifrost container, an Ollama model and a Tavily key. Details, limits and the live record are in [docs/BRIEF.md](docs/BRIEF.md).
+
+Separately, [`src/labproof/inference.py`](src/labproof/inference.py) is a single-use, mock-tested boundary through which a model could propose one declared synthetic operation. It is unrelated to the brief, its live path is blocked (see [docs/INFERENCE.md](docs/INFERENCE.md)), and LabProof never lets a model choose what to run.
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
-| `src/labproof/` | The package: policy, replay engine, evidence and report derivation, local Docker engine, planner and its evaluation, artifact verification, viewer export, CLI |
+| `src/labproof/` | The package: policy, replay engine, evidence and report derivation, local Docker engine, planner and its evaluation, artifact verification, viewer export, remediation brief with its Bifrost and Tavily clients, CLI |
 | `sandboxes/` | Dockerfiles, workers and provisioning for the Python, TypeScript, C and Rust packs |
 | `evidence/` | Retained real container runs, the fixed-v2 runtime acceptance and the image provisioning record |
 | `viewer/` | React and TypeScript read-only viewer; `public/demo.json` is the bundled demo |
+| `scripts/` | Repository hygiene audit; `live-brief/` reproduces the live Bifrost and Tavily check |
 | `tests/` | pytest suite |
-| `docs/` | Architecture, user guide, operations, v2 contract, codec contract, tool matrix, threat model, evaluation protocol, evidence |
+| `docs/` | Architecture, user guide, operations, remediation brief, v2 contract, codec contract, tool matrix, threat model, evaluation protocol, evidence |
 
 ## Development
 
@@ -116,6 +132,7 @@ cd viewer && npm ci && npm run typecheck && npm test
 - The verification pass reads the same frozen snapshot (replay) or a fresh container run of the same fixed fixture (local); it is not an independent live experiment, and variant labels are controller metadata, so this is not a model-blinding benchmark.
 - Canary results establish the tested containment controls, not immunity to container escapes. WSL by itself is not containment.
 - The v2 experiment path is blocked without separately reviewed v2 provisioning; a hypothesis-codec adapter exists in source but is unregistered and unaccepted. No new tool family is promoted. See [docs/TOOL_MATRIX.md](docs/TOOL_MATRIX.md).
+- The remediation brief's advice is model-generated. The quotation check removes invented sources and invented wording; it does not prove that the advice follows from the source, and a small local model often fails the format and yields no verified advice. Severities are a fixed lookup per synthetic finding class, not CVSS scores.
 
 ## AI-assisted development
 

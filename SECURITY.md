@@ -7,7 +7,8 @@ Please report suspected vulnerabilities privately through GitHub's **Report a vu
 ## What this repository does and does not do
 
 - LabProof is an evidence harness over purpose-built synthetic fixtures. It is not a scanner and not an autonomous pentesting agent. It has no input for a URL, host, port, header, payload or command. Do not point anything in this repository at systems you do not own.
-- Every default command (`demo`, `verify-artifacts`, `export-viewer`, `packs`, `doctor`, the planner commands) is offline. They make no network calls, call no model and need no credentials.
+- Every default command (`demo`, `verify-artifacts`, `verify-brief`, `export-viewer`, `packs`, `doctor`, the planner commands, and `brief --demo`) is offline. They make no network calls, call no model and need no credentials.
+- The only network path is `brief --live --confirm-outbound`. It sends fixed search queries to Tavily (directly or through a Bifrost relay) and a fixed prompt with public excerpts to a Bifrost gateway you name (loopback HTTP or a remote HTTPS hostname), using credentials read from environment variables you name. It never sends run data, evidence, paths or identifiers, follows no redirects, uses no environment proxy and never retries. See [docs/BRIEF.md](docs/BRIEF.md).
 - `assess --mode local` runs only fixed, reviewed fixtures through a trusted Linux Docker controller after fresh containment canaries: network none, non-root, read-only root, no host mounts, dropped capabilities, bounded resources, a fresh container per execution and confirmed removal. There is no host-execution fallback. Canary success covers the tested controls, not every possible container escape.
 - Imported artifacts and bundles are untrusted data. The viewer displays them as text and never executes them.
 - Artifact hashes establish consistency, not authenticity. Nothing here is signed.

@@ -120,6 +120,17 @@ python -I -O -m labproof verify-planner-evaluation planner-eval
 
 `evaluate-planner` refuses an existing output directory and prints the overall outcome, the three preregistered criteria and a plain-language summary. `analysis.json` holds the arms, paired bootstrap comparisons and the polluted/unpolluted split; `frozen.json` records the two policies chosen on development cases before the test split was scored. `verify-planner-evaluation` recomputes the whole run and returns 0 only when every artifact matches byte for byte; any edit, extra file, missing file or coherently rehashed forgery returns 1. Both commands treat the result as a synthetic benchmark outcome. It is not a vulnerability, tool or model result, and a passing verification does not prove when the rules were fixed.
 
+## Sourced remediation brief
+
+`brief` writes fix guidance for the confirmed finding classes of a **completed run that passes `verify-artifacts`**. [BRIEF.md](BRIEF.md) has the design, the data boundary and the limits.
+
+```sh
+python -I -m labproof brief lp-demo --demo --output lp-demo-brief
+python -I -m labproof verify-brief lp-demo lp-demo-brief
+```
+
+`--demo` is offline: scripted providers answer with invented excerpts on `docs.example.org`, one scripted proposal carries a deliberately fabricated quotation and is rejected, and the page says it is a demonstration. Real use needs `--live --confirm-outbound`, `--gateway-url`, `--model`, `--gateway-token-env NAME` and either `--tavily-key-env NAME` or `--search-relay NAME`; secrets are read from the named environment variables, never from arguments. The output directory must not exist. Exit **0**: every class is sourced. **2**: the brief was written but a class has no verified advice or a provider step failed. **1**: refused input. `verify-brief` makes no network call and exits 1 on any mismatch with the run or the retained excerpts.
+
 ## Inspection, sharing, and exit codes
 
 Read `manifest.json` first for project, mode, status, and registered paths. Read `report.json` for findings, limitations, provenance, and usage. For v2, follow `completion.missing_controls`, `experiments`, attempt records, evidence IDs, and raw outputs. A controller completion, zero child exit, and recognized parse are separate facts, not synonyms for confirmation.

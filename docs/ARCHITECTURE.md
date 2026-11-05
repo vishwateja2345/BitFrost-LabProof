@@ -32,6 +32,9 @@ flowchart TD
     CLI --> Planning[planning.py: pure Bayesian experiment ranking]
     CLI --> PlannerEval[planner_eval.py: preregistered synthetic evaluation and verifier]
     PlannerEval --> Planning
+    CLI --> Brief[brief.py: sourced remediation brief and its verifier]
+    Brief --> Verify
+    Brief --> Bifrost[bifrost.py: opt-in Tavily and Bifrost clients]
     Contracts[contracts.py: safe bounded bytes and shapes] -.-> Verify
     Contracts -.-> Local
     Contracts -.-> PlannerEval
@@ -42,6 +45,8 @@ flowchart TD
 `planning.py` and `planner_eval.py` are pure host code with no edge to the sandbox, a worker, the network or a model. The planner only ranks experiments the caller declared; it returns a recommendation and never builds a launch plan. The evaluation is a pure function of its source, so its verifier recomputes every artifact instead of trusting stored hashes.
 
 The proposal/inference boundary is separate from these deterministic paths. Neither replay nor local execution calls a model. It cannot be used to bypass profile validation or promote worker output into findings.
+
+`brief.py` is the one place outside that boundary that can reach the network, and only through `bifrost.py` with `--live --confirm-outbound`. It starts from a run that already passed `verify_artifacts.py`, re-derives the confirmed findings itself, sends only a fixed query and public excerpts out, and accepts model text only after its own checks. It has no edge to the sandbox, a worker or the evidence of a run, and its verifier (`verify-brief`) makes no network call. See [BRIEF.md](BRIEF.md).
 
 ## Data and authority
 

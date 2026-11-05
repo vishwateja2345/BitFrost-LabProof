@@ -14,6 +14,7 @@ not a real Hypothesis/ASan/proptest/fast-check capability release.
 - [Third-party notices and licensing scope](THIRD-PARTY-NOTICES.md)
 
 - [Package overview, existing setup and containment workflow](../README.md)
+- [Sourced remediation brief: Bifrost, Tavily, the data boundary and the verification rules](BRIEF.md)
 - [V2 schema, identity, accounting and next real-tool gates](V2-CONTRACT.md)
 - [Inference boundary and blocked live construction](INFERENCE.md)
 - [Generated codec requests, concrete replay and control interpretation](CODEC-CONTRACT.md)
