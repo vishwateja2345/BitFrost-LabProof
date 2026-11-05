@@ -1,0 +1,45 @@
+Sending build context to Docker daemon  1.544MB
+
+Step 1/14 : ARG BASE_IMAGE
+Step 2/14 : FROM ${BASE_IMAGE}
+ ---> 3ecc78cc55f8
+Step 3/14 : ARG BASE_IMAGE
+ ---> Running in 2b2ea426c70f
+ ---> Removed intermediate container 2b2ea426c70f
+ ---> 18905f028778
+Step 4/14 : RUN printf '%s\n' "$BASE_IMAGE" | grep -Eq '^(gcc|docker.io/library/gcc)(:[a-zA-Z0-9._-]+)?@sha256:[a-f0-9]{64}$'
+ ---> Running in 37087214d243
+ ---> Removed intermediate container 37087214d243
+ ---> 8b07b1547b23
+Step 5/14 : RUN test -x /bin/sh && for tool in id awk cat stat env od tr cp chmod head sleep true; do test -x "/usr/bin/$tool" || exit 1; done
+ ---> Running in 51f6e365d46f
+ ---> Removed intermediate container 51f6e365d46f
+ ---> 9c8f9059c255
+Step 6/14 : COPY sandboxes/c/worker.c sandboxes/c/response.h /worker/
+ ---> 527b13f3e6f6
+Step 7/14 : COPY src/labproof/fixtures/packs/c/alpha/authz.c /fixture/alpha/authz.c
+ ---> 5d4a1dada796
+Step 8/14 : COPY src/labproof/fixtures/packs/c/beta/authz.c /fixture/beta/authz.c
+ ---> a6e6e9bc4f07
+Step 9/14 : COPY src/labproof/fixtures/packs/c/gamma/authz.c /fixture/gamma/authz.c
+ ---> 5cdf2c0c40e1
+Step 10/14 : COPY src/labproof/fixtures/packs/c/delta/authz.c /fixture/delta/authz.c
+ ---> 4a3292ecb052
+Step 11/14 : RUN gcc -std=c17 -O2 -Wall -Wextra -Wpedantic -Werror -I/fixture /worker/worker.c -o /worker/observe
+ ---> Running in da0616699ca7
+ ---> Removed intermediate container da0616699ca7
+ ---> f1c556b34a90
+Step 12/14 : USER 65532:65532
+ ---> Running in 2c78d42a9f5c
+ ---> Removed intermediate container 2c78d42a9f5c
+ ---> 8fa91f783a1c
+Step 13/14 : WORKDIR /tmp
+ ---> Running in cdeb65e77523
+ ---> Removed intermediate container cdeb65e77523
+ ---> 0d3ada405780
+Step 14/14 : ENTRYPOINT ["/worker/observe"]
+ ---> Running in 5ba2b7ff4cdf
+ ---> Removed intermediate container 5ba2b7ff4cdf
+ ---> e48f8fc4ff2e
+Successfully built e48f8fc4ff2e
+Successfully tagged labproof-c:local

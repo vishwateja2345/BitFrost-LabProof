@@ -1,0 +1,57 @@
+{
+  "schema_version": "fixture-oracle-1",
+  "fixture_id": "python-synthetic-v1",
+  "visibility": "evaluator-only-never-copy-into-worker",
+  "status": "proposed-unexecuted-not-evaluation-approved",
+  "variant_roles": {
+    "alpha": "defective",
+    "beta": "corrected",
+    "gamma": "normal",
+    "delta": "ambiguous"
+  },
+  "case_roles": {
+    "case-01": "cross-user-probe",
+    "case-02": "legitimate-bob-control",
+    "case-03": "legitimate-alice-control",
+    "case-04": "unknown-actor-control",
+    "case-05": "missing-record-control"
+  },
+  "expected_statuses": {
+    "alpha": [
+      200,
+      200,
+      200,
+      401,
+      404
+    ],
+    "beta": [
+      403,
+      200,
+      200,
+      401,
+      404
+    ],
+    "gamma": [
+      403,
+      200,
+      200,
+      401,
+      404
+    ],
+    "delta": [
+      503,
+      503,
+      503,
+      401,
+      503
+    ]
+  },
+  "grading_notes": [
+    "Source variants and input rows are synthetic implementation fixtures, not approved model-effectiveness cases.",
+    "gamma deliberately duplicates beta behavior as a no-defect normal baseline; all images see the same probe/control inputs without role labels.",
+    "Do not grade by status alone: alpha case-01 must expose exactly record-bob owned by bob with SYNTHETIC-BOB, while beta/gamma case-01 must return forbidden.",
+    "case-02 must contain record-bob, bob, SYNTHETIC-BOB; case-03 must contain record-alice, alice, SYNTHETIC-ALICE for functional controls.",
+    "delta fails functional controls and remains inconclusive; shape-test success and AST observations never confirm security properties.",
+    "Future independent reset-and-control grader must run outside solver image; no grading implementation is bundled here."
+  ]
+}

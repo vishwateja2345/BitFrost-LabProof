@@ -1,0 +1,6 @@
+# No external dependencies. Retained lockfile is used with --offline --locked.
+version = 3
+
+[[package]]
+name = "labproof-worker"
+version = "0.1.0"

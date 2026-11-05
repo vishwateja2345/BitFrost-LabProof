@@ -1,0 +1,141 @@
+"""Independent command-line entry points; stdout is machine-readable JSON."""
+import argparse
+import json
+from pathlib import Path
+import sys
+
+from .contracts import ValidationError, check_no_links, parse_json
+from .packs import PackError
+from .engine import run_demo
+from .policy import Limits, PolicyError
+from .transport import doctor
+from .verify_artifacts import verify_artifacts
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="labproof", description="Synthetic replay and bounded local language experiments. No arbitrary target support.")
+    commands = parser.add_subparsers(dest="command", required=True)
+    demo = commands.add_parser("demo", help="Run canned observations offline into a NEW output directory")
+    demo.add_argument("--output", type=Path, required=True)
+    demo.add_argument("--max-actions", type=int, default=36, help="Lower the replay budget (0-36)")
+    verify = commands.add_parser("verify-artifacts", help="Validate saved artifacts without executing checks")
+    verify.add_argument("directory", type=Path)
+    commands.add_parser("packs", help="List declared language operations; does not execute or probe tools")
+    commands.add_parser("doctor", help="Report replay readiness and blocked assessment gates")
+    assess = commands.add_parser("assess", help="Run a provisioned synthetic pack only after containment acceptance")
+    assess.add_argument("--mode", choices=["local"])
+    assess.add_argument("--pack", choices=["python", "typescript", "c", "rust"])
+    assess.add_argument("--output", type=Path)
+    export = commands.add_parser("export-viewer", help="Verify own runs and exclusively write a viewer bundle up to 5 MiB")
+    export.add_argument("directories", type=Path, nargs="+")
+    export.add_argument("--output", type=Path, required=True)
+    experiment_plan = commands.add_parser("experiment-plan", help="Print a bounded v2 plan; does not provision or execute tools")
+    experiment_plan.add_argument("--pack", choices=["python", "typescript", "c", "rust"], required=True)
+    experiments = commands.add_parser("experiments", help="Run a validated v2 plan; blocked without separately reviewed v2 provisioning")
+    experiments.add_argument("--plan", type=Path, required=True)
+    experiments.add_argument("--output", type=Path, required=True)
+    planner = commands.add_parser("plan-next", help="Rank bounded experiments for a declared synthetic hypothesis model; executes nothing")
+    planner.add_argument("--input", type=Path, help="Planning request JSON (64 KiB maximum)")
+    planner.add_argument("--example", action="store_true", help="Print an editable example request instead")
+    evaluate = commands.add_parser("evaluate-planner", help="Run the preregistered synthetic planner evaluation into a NEW directory")
+    evaluate.add_argument("--output", type=Path, required=True)
+    verify_evaluation = commands.add_parser("verify-planner-evaluation", help="Recompute a retained planner evaluation and compare it byte for byte")
+    verify_evaluation.add_argument("directory", type=Path)
+    compare = commands.add_parser("compare-experiments", help="Compare two independently verified fixed-v2 runs without execution")
+    compare.add_argument("before", type=Path)
+    compare.add_argument("after", type=Path)
+    compare.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args(argv)
+    try:
+        if args.command == "compare-experiments":
+            from .experiment_comparison import compare_experiments
+            from .contracts import canonical, require
+            from .engine import write_new
+            output = args.output.absolute()
+            check_no_links(output.parent)
+            require(not output.exists(), "Comparison output must be new")
+            require(not any(output.is_relative_to(root.absolute()) for root in (args.before, args.after)),
+                    "Comparison output must be outside source runs")
+            result = compare_experiments(args.before, args.after)
+            raw = canonical(result)
+            require(len(raw) <= 2_000_000, "Comparison exceeds output ceiling")
+            write_new(output, raw)
+            print(json.dumps({"status": result["status"], "output": str(output)}, indent=2))
+            return 0
+        if args.command == "plan-next":
+            from .planning import example_request, plan_next
+            if args.example == (args.input is not None):
+                raise ValidationError("Use exactly one of --example or --input")
+            if args.example:
+                print(json.dumps(example_request(), indent=2))
+                return 0
+            check_no_links(args.input.absolute())
+            with args.input.open("rb") as stream:
+                raw = stream.read(65537)
+            if len(raw) > 65536:
+                raise ValidationError("Planning request exceeds 64 KiB")
+            print(json.dumps(plan_next(parse_json(raw)), indent=2))
+            return 0
+        if args.command == "evaluate-planner":
+            from .planner_eval import evaluate_planner
+            print(json.dumps(evaluate_planner(args.output), indent=2))
+            return 0
+        if args.command == "verify-planner-evaluation":
+            from .planner_eval import verify_planner_evaluation
+            print(json.dumps(verify_planner_evaluation(args.directory), indent=2))
+            return 0
+        if args.command == "export-viewer":
+            from .export_viewer import export_viewer
+            print(json.dumps(export_viewer(args.directories, args.output), indent=2))
+            return 0
+        if args.command == "experiment-plan":
+            from .local_profiles import default_experiment_plan
+            print(json.dumps(default_experiment_plan(args.pack), indent=2))
+            return 0
+        if args.command == "experiments":
+            from .local_engine import run_experiments
+            check_no_links(args.plan.absolute())
+            with args.plan.open("rb") as stream:
+                plan = parse_json(stream.read(65537))
+            if args.plan.stat().st_size > 65536:
+                raise ValidationError("Experiment plan exceeds 64 KiB")
+            result = run_experiments(args.output, plan)
+            print(json.dumps({"run_id": result["run_id"], "mode": "local", "status": result["status"],
+                              "output": str(args.output.absolute())}, indent=2))
+            return 0 if result["status"] == "completed" else 2
+        if args.command == "packs":
+            from .packs import REGISTRY
+            from .local_engine import OPERATIONS
+            result = {"project_id": "labproof", "assessment": "blocked",
+                      "assessment_scope": "broad_catalogue_not_runtime_acceptance",
+                      "local_mode": {"readiness": "not_probed",
+                                     "fixed_operations": {pack: value[0] for pack, value in OPERATIONS.items()}},
+                      "packs": [{**pack.to_dict(), "provisioned": pack.provisioned}
+                                for pack in REGISTRY.packs],
+                      "limitations": ["Declared operations are not installed or verified capabilities.",
+                                      "No runtime probe, fixture execution, or model call is performed."]}
+            print(json.dumps(result, indent=2))
+            return 0
+        if args.command == "assess" and args.mode == "local":
+            if args.pack is None or args.output is None:
+                raise ValidationError("Local assessment requires --pack and --output")
+            from .local_engine import run_local
+            result = run_local(args.output, args.pack)
+            print(json.dumps({"run_id": result["run_id"], "mode": "local", "status": result["status"],
+                              "output": str(args.output.absolute())}, indent=2))
+            return 0 if result["status"] == "completed" else 2
+        if args.command in {"doctor", "assess"}:
+            result = doctor()
+            result["command"] = args.command
+            print(json.dumps(result, indent=2))
+            return 2  # Nonzero: actual assessment is NOT ready.
+        if args.command == "verify-artifacts":
+            result = verify_artifacts(args.directory)
+            print(json.dumps(result, indent=2))
+            return 0 if result["complete"] else 2
+        result = run_demo(args.output, limits=Limits(max_actions=args.max_actions))
+        print(json.dumps({"run_id": result["run_id"], "mode": result["mode"], "status": result["status"], "output": str(args.output.absolute())}, indent=2))
+        return 0 if result["status"] == "completed" else 2
+    except (ValidationError, PolicyError, PackError, OSError) as exc:
+        print(json.dumps({"error": type(exc).__name__, "message": str(exc)}), file=sys.stderr)
+        return 1

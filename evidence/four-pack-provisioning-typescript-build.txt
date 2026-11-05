@@ -1,0 +1,40 @@
+Sending build context to Docker daemon  1.518MB
+
+Step 1/13 : ARG BASE_IMAGE
+Step 2/13 : FROM ${BASE_IMAGE}
+ ---> 9564952982df
+Step 3/13 : ARG BASE_IMAGE
+ ---> Using cache
+ ---> 5b2e5691fff3
+Step 4/13 : RUN /usr/local/bin/node -e 'if (!/^[a-z0-9][a-z0-9./:_-]*@sha256:[a-f0-9]{64}$/.test(process.argv[1]) || Number(process.versions.node.split(".")[0]) < 24) process.exit(1)' "${BASE_IMAGE}"
+ ---> Using cache
+ ---> 55dab25816f7
+Step 5/13 : COPY sandboxes/node/worker.mjs /worker/worker.mjs
+ ---> Using cache
+ ---> b57f59a3059d
+Step 6/13 : COPY sandboxes/node/observe.test.mjs /worker/observe.test.mjs
+ ---> Using cache
+ ---> 01739bfe7137
+Step 7/13 : COPY src/labproof/fixtures/packs/typescript/alpha/ /fixture/alpha/
+ ---> Using cache
+ ---> 4e39f29d1f37
+Step 8/13 : COPY src/labproof/fixtures/packs/typescript/beta/ /fixture/beta/
+ ---> Using cache
+ ---> d6dedf9f3488
+Step 9/13 : COPY src/labproof/fixtures/packs/typescript/gamma/ /fixture/gamma/
+ ---> Using cache
+ ---> 22f917732e42
+Step 10/13 : COPY src/labproof/fixtures/packs/typescript/delta/ /fixture/delta/
+ ---> Using cache
+ ---> 554332584fc8
+Step 11/13 : USER 65532:65532
+ ---> Using cache
+ ---> 05d2e0041048
+Step 12/13 : WORKDIR /tmp
+ ---> Using cache
+ ---> 9aec50bf4499
+Step 13/13 : ENTRYPOINT ["/usr/local/bin/node", "/worker/worker.mjs"]
+ ---> Using cache
+ ---> 98eb7fedd426
+Successfully built 98eb7fedd426
+Successfully tagged labproof-typescript:local

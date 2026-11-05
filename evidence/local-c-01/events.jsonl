@@ -1,0 +1,4 @@
+{"data":{"mode":"local","pack_id":"c"},"run_id":"lp_841cf80bfe9b48b6a0290299aa936bad","sequence":1,"timestamp":"2026-11-01T11:04:19.702322+00:00","type":"run_started"}
+{"data":{"accepted":false},"run_id":"lp_841cf80bfe9b48b6a0290299aa936bad","sequence":2,"timestamp":"2026-11-01T11:04:19.772061+00:00","type":"containment_checked"}
+{"data":{"error_id":"error_1"},"run_id":"lp_841cf80bfe9b48b6a0290299aa936bad","sequence":3,"timestamp":"2026-11-01T11:04:19.782049+00:00","type":"run_error"}
+{"data":{"evidence_count":0,"status":"blocked"},"run_id":"lp_841cf80bfe9b48b6a0290299aa936bad","sequence":4,"timestamp":"2026-11-01T11:04:20.000991+00:00","type":"run_stopped"}

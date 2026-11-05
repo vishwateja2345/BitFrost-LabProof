@@ -1,0 +1,12 @@
+{
+  "schema_version": "codec-oracle-1",
+  "fixture_id": "python-codec-v1",
+  "visibility": "host-only-never-copy-into-worker",
+  "status": "source-only-unprovisioned-unexecuted",
+  "variant_roles": {"alpha": "defective", "beta": "corrected", "gamma": "normal", "delta": "ambiguous"},
+  "wire_format": "one unsigned length byte followed by exactly that many payload bytes",
+  "properties": ["roundtrip", "boundary", "malformed"],
+  "controls": ["empty-payload roundtrip", "255-byte payload roundtrip", "256-byte payload rejection", "empty frame rejection"],
+  "confirmation": "Repeated exact malformed-frame acceptance on alpha, exact same frame rejected with ValueError on beta and gamma; all legitimate/boundary controls pass in each fresh run; delta remains ambiguous. Controller containment, full request/seed/input and fresh worker bindings are required separately.",
+  "limitations": ["Purpose-built synthetic codec only", "Not an effectiveness benchmark", "No actual Hypothesis execution or containment acceptance yet", "Hashes are unsigned consistency bindings, not proof of execution"]
+}

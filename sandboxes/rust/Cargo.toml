@@ -1,0 +1,11 @@
+[package]
+name = "labproof-worker"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "labproof-worker"
+path = "src/main.rs"
+
+[dependencies]

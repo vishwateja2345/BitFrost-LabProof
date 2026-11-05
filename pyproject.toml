@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "labproof"
+version = "0.1.0"
+description = "Bounded, evidence-first synthetic assessment replay"
+requires-python = ">=3.12"
+dependencies = []
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+labproof = "labproof.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+labproof = [
+    "fixtures/*.json",
+    "fixtures/packs/*/*.host-only.json",
+    "fixtures/packs/python/*/authz.py",
+    "fixtures/packs/python/*/inputs.json",
+    "fixtures/packs/typescript/*/authz.ts",
+    "fixtures/packs/typescript/*/inputs.json",
+    "fixtures/packs/c/*/authz.c",
+    "fixtures/packs/c/*/inputs.json",
+    "fixtures/packs/rust/*/authz.rs",
+    "fixtures/packs/rust/*/inputs.json",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

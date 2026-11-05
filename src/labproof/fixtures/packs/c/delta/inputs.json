@@ -1,0 +1,27 @@
+[
+  {
+    "id": "case-01",
+    "actor": "alice",
+    "record_id": "record-bob"
+  },
+  {
+    "id": "case-02",
+    "actor": "bob",
+    "record_id": "record-bob"
+  },
+  {
+    "id": "case-03",
+    "actor": "alice",
+    "record_id": "record-alice"
+  },
+  {
+    "id": "case-04",
+    "actor": "guest",
+    "record_id": "record-bob"
+  },
+  {
+    "id": "case-05",
+    "actor": "alice",
+    "record_id": "record-missing"
+  }
+]

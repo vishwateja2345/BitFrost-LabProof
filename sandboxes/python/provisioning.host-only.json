@@ -1,0 +1,47 @@
+{
+  "schema_version": "sandbox-recipe-1",
+  "status": "provisioning-blocked",
+  "base_image": null,
+  "image_digest": null,
+  "toolchain_version": null,
+  "dependency_lock": null,
+  "implemented_source_operations": [
+    "python-ast",
+    "python-invariants"
+  ],
+  "external_dependencies": [],
+  "blocked_operations": [
+    "python-ruff",
+    "python-bandit",
+    "python-pytest",
+    "python-hypothesis",
+    "python-coverage"
+  ],
+  "prerequisites": [
+    "Supply reviewed base repository@sha256 digest and record exact preinstalled runtime/tool versions; no base selected or checksum invented.",
+    "No dependency installs are in the recipe; listed source operations use runtime standard-library tools only.",
+    "External tools need separately reviewed exact version locks and verified artifact hashes; unavailable operations are rejected, never emulated.",
+    "Recipe digest validation occurs after FROM and cannot authorize pulling/building; controller must validate base before an explicitly approved offline build.",
+    "Runtime must enforce network-none, non-root, readonly root, bounded noexec tmpfs, capability drop, no-new-privileges, wall/output/memory/pid limits and independent canaries.",
+    "No builds, fixture execution, container execution or isolation checks have been performed."
+  ],
+  "worker_interface": {
+    "arguments": [
+      "operation_id",
+      "opaque_variant"
+    ],
+    "allowed_variants": [
+      "alpha",
+      "beta",
+      "gamma",
+      "delta"
+    ],
+    "stdin": "unused",
+    "output_schema": "worker-observation-1",
+    "notes": "Narrow controller mapping from validated typed request; no path/argv fields accepted. Output is untrusted observations, NOT ToolResult; host adds attested identities only after acceptance."
+  },
+  "evaluator_only_paths": [
+    "src/labproof/fixtures/packs/python/oracle.host-only.json",
+    "sandboxes/python/provisioning.host-only.json"
+  ]
+}

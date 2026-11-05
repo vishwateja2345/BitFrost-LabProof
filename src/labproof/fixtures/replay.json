@@ -1,0 +1,48 @@
+{
+  "schema_version": "1.0",
+  "provenance": "Hand-authored synthetic HTTP-shaped observations; never captured from a service",
+  "responses": {
+    "vulnerable": {
+      "object_authorization": {
+        "probe": {"status": 200, "content_type": "application/json", "body": "{\"id\":\"record-bob\",\"owner\":\"bob\",\"value\":\"SYNTHETIC-BOB-ONLY\"}"},
+        "normal": {"status": 200, "content_type": "application/json", "body": "{\"id\":\"record-bob\",\"owner\":\"bob\",\"value\":\"SYNTHETIC-BOB-ONLY\"}"}
+      },
+      "html_reflection": {
+        "probe": {"status": 200, "content_type": "text/html", "body": "<p>Hello <em>LABPROOF-MARKER</em></p>"},
+        "normal": {"status": 200, "content_type": "text/html", "body": "<p>Hello LABPROOF-NORMAL</p>"}
+      },
+      "error_disclosure": {
+        "probe": {"status": 500, "content_type": "text/plain", "body": "SYNTHETIC Traceback: lab/demo.py line 17; SyntheticDatabaseError; demo_config=training-only"},
+        "normal": {"status": 200, "content_type": "application/json", "body": "{\"result\":\"SYNTHETIC-OK\"}"}
+      }
+    },
+    "corrected": {
+      "object_authorization": {
+        "probe": {"status": 403, "content_type": "application/json", "body": "{\"error\":\"forbidden\"}"},
+        "normal": {"status": 200, "content_type": "application/json", "body": "{\"id\":\"record-bob\",\"owner\":\"bob\",\"value\":\"SYNTHETIC-BOB-ONLY\"}"}
+      },
+      "html_reflection": {
+        "probe": {"status": 200, "content_type": "text/html", "body": "<p>Hello &lt;em&gt;LABPROOF-MARKER&lt;/em&gt;</p>"},
+        "normal": {"status": 200, "content_type": "text/html", "body": "<p>Hello LABPROOF-NORMAL</p>"}
+      },
+      "error_disclosure": {
+        "probe": {"status": 500, "content_type": "text/plain", "body": "Request failed; reference SYNTHETIC-ERROR"},
+        "normal": {"status": 200, "content_type": "application/json", "body": "{\"result\":\"SYNTHETIC-OK\"}"}
+      }
+    },
+    "uncertain": {
+      "object_authorization": {
+        "probe": {"status": 503, "content_type": "text/plain", "body": "Synthetic fixture unavailable"},
+        "normal": {"status": 503, "content_type": "text/plain", "body": "Synthetic fixture unavailable"}
+      },
+      "html_reflection": {
+        "probe": {"status": 503, "content_type": "text/plain", "body": "Synthetic fixture unavailable"},
+        "normal": {"status": 503, "content_type": "text/plain", "body": "Synthetic fixture unavailable"}
+      },
+      "error_disclosure": {
+        "probe": {"status": 503, "content_type": "text/plain", "body": "Synthetic fixture unavailable"},
+        "normal": {"status": 503, "content_type": "text/plain", "body": "Synthetic fixture unavailable"}
+      }
+    }
+  }
+}
