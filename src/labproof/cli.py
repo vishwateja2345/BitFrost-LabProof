@@ -1,6 +1,7 @@
 """Independent command-line entry points; stdout is machine-readable JSON."""
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -45,6 +46,23 @@ def main(argv=None):
     compare.add_argument("before", type=Path)
     compare.add_argument("after", type=Path)
     compare.add_argument("--output", type=Path, required=True)
+    brief = commands.add_parser("brief", help="Write a sourced remediation brief for a verified run: offline --demo, or opt-in --live with Tavily and a Bifrost gateway")
+    brief.add_argument("run", type=Path, help="A completed run directory that passes verify-artifacts")
+    brief.add_argument("--output", type=Path, required=True, help="NEW directory for brief.json and brief.html")
+    brief.add_argument("--demo", action="store_true", help="Scripted providers and invented excerpts; no network, no credentials")
+    brief.add_argument("--live", action="store_true", help="Real research and model calls; needs --confirm-outbound")
+    brief.add_argument("--confirm-outbound", action="store_true", help="Consent to send the fixed queries to Tavily and public excerpts to the gateway")
+    brief.add_argument("--gateway-url", help="Bifrost origin: loopback HTTP or a remote HTTPS hostname")
+    brief.add_argument("--model", help="Bifrost model, for example provider/model")
+    brief.add_argument("--fallback", action="append", default=[], help="Requested Bifrost fallback model; repeatable, at most 3")
+    brief.add_argument("--gateway-token-env", help="Name of the environment variable holding the Bifrost virtual key")
+    brief.add_argument("--tavily-key-env", help="Name of the environment variable holding the Tavily API key")
+    brief.add_argument("--search-relay", help="Search through this Bifrost relay (the Tavily key stays in the gateway)")
+    brief.add_argument("--gateway-timeout", type=float, help="Seconds allowed per model call, 1-180 (default 60)")
+    brief.add_argument("--json-mode", action="store_true", help="Also send response_format json_object (honoured by OpenAI-compatible providers; a gateway may ignore it, a provider may reject it)")
+    verify_brief = commands.add_parser("verify-brief", help="Check a brief against its source run and its retained excerpts; makes no network call")
+    verify_brief.add_argument("run", type=Path)
+    verify_brief.add_argument("brief", type=Path)
     args = parser.parse_args(argv)
     try:
         if args.command == "compare-experiments":
@@ -103,6 +121,15 @@ def main(argv=None):
             print(json.dumps({"run_id": result["run_id"], "mode": "local", "status": result["status"],
                               "output": str(args.output.absolute())}, indent=2))
             return 0 if result["status"] == "completed" else 2
+        if args.command == "brief":
+            from .brief import brief_from_args
+            result = brief_from_args(args, os.environ)
+            print(json.dumps(result, indent=2))
+            return 0 if result["status"] == "completed" else 2
+        if args.command == "verify-brief":
+            from .brief import verify_brief
+            print(json.dumps(verify_brief(args.run, args.brief), indent=2))
+            return 0
         if args.command == "packs":
             from .packs import REGISTRY
             from .local_engine import OPERATIONS
