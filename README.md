@@ -115,7 +115,7 @@ Separately, [`src/labproof/inference.py`](src/labproof/inference.py) is a single
 | `viewer/` | React and TypeScript read-only viewer; `public/demo.json` is the bundled demo |
 | `scripts/` | Repository hygiene audit; `live-brief/` reproduces the live Bifrost and Tavily check |
 | `tests/` | pytest suite |
-| `docs/` | Architecture, user guide, operations, remediation brief, v2 contract, codec contract, tool matrix, threat model, evaluation protocol, evidence |
+| `docs/` | Architecture, user guide, operations, remediation brief, v2 contract, codec contract, tool matrix, threat model, evaluation protocol, evidence, and the pitch deck (`docs/pitch/`, PowerPoint and PDF) |
 
 ## Development
 
