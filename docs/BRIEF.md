@@ -14,8 +14,8 @@ flowchart LR
   C -->|"fixed query<br/>owasp.org, cwe.mitre.org"| T["Tavily Search"]
   T -->|"public excerpts"| H{"LabProof host"}
   H -->|"class description + excerpts"| B["Bifrost gateway<br/>to a model"]
-  B -->|"JSON: advice + quotations"| H
-  H -->|"keep advice whose quotations<br/>occur verbatim in an excerpt"| O["brief.json + brief.html"]
+  B -->|"JSON: advice + passage ID"| H
+  H -->|"attach the selected verbatim passage"| O["brief.json + brief.html"]
   O --> V["verify-brief<br/>offline re-check"]
 ```
 
@@ -27,7 +27,7 @@ flowchart LR
 | Which queries run | A fixed catalogue, one query per finding class (below). The model never chooses or edits a query |
 | Which web pages count | A host allow-list: `owasp.org` and `cwe.mitre.org` (and subdomains). Anything else is dropped before the model sees it |
 | Severity | A fixed rating per finding class, with its reason. It is a rating of the synthetic finding class, not a CVSS score |
-| Which advice is kept | The host: 1 to 3 quotations of 20 to 300 characters, each present verbatim (after whitespace and Unicode normalisation) in the excerpt of the source it names. Everything else is rejected and kept only as a digest and a reason |
+| Which advice is kept | The model selects an ID from the passages in its prompt. The host validates every returned ID and attaches up to three distinct passages in reply order. Older briefs and scripted replies can include one to three verbatim quotations of 20 to 300 characters. Rejections retain a digest and a reason |
 | Retries, budget, failover, rate limits | Bifrost. LabProof never retries and never changes wording or routing after a refusal |
 
 The model's text is labelled model-generated in the page. It can add a sentence of advice; it cannot add, change or remove a finding, a severity, a source or a query.
@@ -94,6 +94,8 @@ TAVILY_API_KEY=... scripts/live-brief/run.sh                       # direct sear
 MODES=relay LIVE_MODEL=qwen2.5:3b CALL_TIMEOUT=150 scripts/live-brief/run.sh
 ```
 
+On Docker Desktop the script publishes Bifrost on loopback. With a host Ollama server, the gateway reaches it through `host.docker.internal`. When Ollama runs in another container, put both containers on a dedicated bridge. Set `BIFROST_DOCKER_NETWORK` to that network, `OLLAMA_PROVIDER_URL` to the Ollama container's address on it, and `OLLAMA_URL` to the Ollama endpoint reachable from your shell for the model check. The script authorizes the selected model on the virtual key and returns `2` when a saved brief is partial.
+
 Bifrost documents the request shapes the clients follow: `/v1/chat/completions` with an `x-bf-vk` virtual key, relays at `/relay/NAME/...`, and `fallbacks` in the request body ([docs.getbifrost.ai](https://docs.getbifrost.ai)). Tavily Search is documented at [docs.tavily.com](https://docs.tavily.com).
 
 ## What `verify-brief` checks
@@ -141,6 +143,8 @@ One Tavily `basic` search per confirmed class, so one credit for a pack run (one
 [`evidence/live-brief-01/`](../evidence/live-brief-01) holds the first real runs, made from the retained Python container run with a pinned Bifrost container, `ollama/qwen2.5:3b` on CPU and real Tavily searches. Both final runs (direct search and relay search) are `sourced` with one verified recommendation quoting an OWASP API Security Top 10 page; two earlier attempts are kept because they failed in instructive ways: a gateway timeout from the slow CPU-only model (`model_failed`) and a reply with its outer JSON brace missing (`no_verified_advice`). Its README lists the set-up, the credits used and what each attempt changed. Every record verifies with `verify-brief`.
 
 Two provider facts from those runs: the Bifrost relay carried the Tavily search with only the virtual key on the client, and Bifrost v2.4.0 accepted but ignored `response_format` for the Ollama provider (Ollama honoured it when called directly), which is why `--json-mode` is opt-in.
+
+[The Docker Desktop live record](../evidence/live-brief-02) preserves the fresh direct and relayed searches, the gateway outcomes, and the validation results for each model reply.
 
 ## Tests
 

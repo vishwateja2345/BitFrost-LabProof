@@ -4,7 +4,7 @@ from pathlib import Path
 
 from .contracts import (ID_RE, SHA_RE, MAX_FILES, ValidationError, canonical, check_no_links,
                         parse_json, read_safe, require, strings, timestamp, validate_manifest)
-from .policy import Action, Check, Limits, PHASES, VARIANTS
+from .policy import Action, Limits, PHASES, VARIANTS
 from .report import adjudicate, replay_narrative
 from .transport import Response
 
@@ -29,11 +29,13 @@ def _jsonl(raw):
     return [parse_json(row) for row in rows]
 
 
-def _verify(root):
+def _verify(root, *, expected_manifest=None):
     root = Path(root).absolute()
     check_no_links(root)
     require(root.is_dir(), "Run directory missing")
-    manifest = parse_json(read_safe(root, "manifest.json"))
+    raw = read_safe(root, "manifest.json")
+    require(expected_manifest is None or raw == expected_manifest, "Manifest changed before replay verification")
+    manifest = parse_json(raw)
     validate_manifest(manifest)
     require(manifest["mode"] == "replay", "This version verifies replay only; live/local is unsupported")
     payloads = {}
@@ -172,14 +174,16 @@ def _verify(root):
     return {"valid": True, "project_id": "labproof", "run_id": manifest["run_id"], "status": manifest["status"], "complete": manifest["status"] == "completed", "artifact_count": len(payloads), "limitation": "Internal consistency only; unsigned hashes are not authenticity or proof of a live assessment."}
 
 
-def verify_artifacts(root):
+def verify_artifacts(root, *, expected_manifest=None):
     try:
-        manifest = parse_json(read_safe(Path(root).absolute(), "manifest.json"))
+        raw = read_safe(Path(root).absolute(), "manifest.json")
+        require(expected_manifest is None or raw == expected_manifest, "Manifest changed before verification")
+        manifest = parse_json(raw)
         validate_manifest(manifest)
         if manifest["mode"] == "local":
             from .verify_local import verify_local
-            return verify_local(root)
-        return _verify(root)
+            return verify_local(root, expected_manifest=expected_manifest)
+        return _verify(root, expected_manifest=expected_manifest)
     except ValidationError:
         raise
     except (OSError, ValueError, TypeError, KeyError, AttributeError, RecursionError) as exc:

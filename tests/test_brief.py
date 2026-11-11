@@ -561,3 +561,26 @@ def test_a_reply_is_completed_only_when_closing_brackets_are_missing(mutate, acc
     assert len(got) == accepted and rejected == ([] if accepted else [{"reason": "reply_not_json", "text_sha256": B.digest(reply.encode("utf-8"))}])
     if accepted:
         assert got[0]["text"] == TEXT and got[0]["quotes"] == [{"source_id": "src-object_authorization-1", "quote": QUOTE["object_authorization"]}]
+
+
+def test_reply_selects_exact_saved_passage():
+    candidates = B.citation_candidates(SOURCES)
+    assert candidates["q1"]["quote"] in SOURCES[0]["excerpt"]
+    reply = json.dumps({"recommendations": [{"text": TEXT, "cite": "q1"}, {"text": TEXT, "cite": "q999"}]})
+    got, rejected = B.parse_reply(reply, SOURCES)
+    assert got == [{"text": TEXT, "quotes": [candidates["q1"]]}]
+    assert [entry["reason"] for entry in rejected] == ["invalid_quote"]
+
+
+def test_reply_accepts_only_known_ids_in_gateway_citation_lists():
+    sources = [{"id": SOURCES[0]["id"], "excerpt": " ".join(
+        f"Each separate passage contains an authorization rule numbered {index}." for index in range(1, 5)
+    )}]
+    candidates = B.citation_candidates(sources)
+    reply = json.dumps({"recommendations": [
+        {"text": TEXT, "cite": "q2, q2 q1,q3,q4"},
+        {"text": TEXT, "cite": "q1,q999"},
+    ]})
+    got, rejected = B.parse_reply(reply, sources)
+    assert got == [{"text": TEXT, "quotes": [candidates[key] for key in ("q2", "q1", "q3")]}]
+    assert [entry["reason"] for entry in rejected] == ["invalid_quote"]

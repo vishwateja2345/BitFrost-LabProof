@@ -4,11 +4,11 @@
 
 LabProof answers one narrow question honestly: *did this program really leak data, and do we have the evidence to say so?* It runs purpose-built vulnerable and corrected program pairs (Python, TypeScript, C and Rust) in locked-down containers, records what they return, and reports each finding as **confirmed**, **rejected** or **inconclusive** only when the positive observations, the normal-use controls and the corrected-twin controls all agree, twice, in fresh containers. Every run is written as hash-registered artifacts that anyone can re-verify offline.
 
-It is a bounded harness, not a scanner and not an autonomous pentesting agent: there is no input for a URL, host, port, header, payload or command, and nothing outside the fixed synthetic fixtures can be reached. Python 3.12+, standard library only. Every default command is offline and needs no credentials; the one network path is the opt-in `brief --live`, described under [Bifrost and Tavily](#bifrost-and-tavily-the-sourced-remediation-brief).
+LabProof verifies and reviews evidence from bounded replay and local container runs. It uses Python 3.12+ and the standard library. The opt-in `brief --live` command uses Tavily and Bifrost to draft sourced remediation guidance.
 
 ![LabProof viewer showing five verified runs: a replay and four real container runs](docs/screenshots/viewer-overview.png)
 
-*The read-only viewer on the bundled demo: one replay and four real container runs (Python, TypeScript, Rust, C), 25 findings, 68 evidence records.*
+*Saved review of four container runs (Python, TypeScript, Rust, and C), with 16 findings and 32 evidence records.*
 
 ## What it does
 
@@ -28,6 +28,7 @@ python -m venv .venv
 # Linux/macOS:      source .venv/bin/activate
 python -m pip install .
 
+mkdir -p runs
 python -m labproof demo --output runs/demo                 # frozen synthetic replay, offline
 python -m labproof verify-artifacts runs/demo
 python -m labproof export-viewer runs/demo --output runs/demo-viewer.json
@@ -56,10 +57,16 @@ Each completed pack has 8 observations and ends with 1 confirmed, 2 rejected and
 ```bash
 cd viewer
 npm ci
-npm run dev            # serves the bundled demo (replay plus the four real runs) on http://127.0.0.1:5173
+npm run dev            # opens the saved lab review on http://127.0.0.1:5173
 ```
 
-Import your own bundle with **Import bundle** (up to 5 MiB; it stays in the browser). The viewer shows text only, never executes imported content, and states that it is not an independent verifier.
+The workspace opens four saved container runs by default. Select a finding to compare the expected behavior, recorded result, and linked controls. Search and filter by run or result status, then switch to **Evidence ledger**, **Run trace**, or **Original reports** to inspect the underlying records.
+
+Use **Import bundle** to open a JSON file produced by `export-viewer` (up to 5 MiB). The file stays in your browser. **Open saved review** returns to the retained container runs. For offline consistency verification, run `verify-artifacts` against the full run directory.
+
+Use `review-export` when an operator needs to approve one specific export. The approval binds the source manifest and destination to a task and expires after a short window. [Approved export guide](docs/REVIEW-EXPORT.md)
+
+The **Remediation** tab shows a retained Tavily and Bifrost brief for the Python run. To prepare a fresh offline demo, attach your own verified brief, or rehearse the walkthrough, see [docs/DEMO.md](docs/DEMO.md).
 
 ### Running the language packs yourself
 
@@ -112,7 +119,7 @@ Separately, [`src/labproof/inference.py`](src/labproof/inference.py) is a single
 | `src/labproof/` | The package: policy, replay engine, evidence and report derivation, local Docker engine, planner and its evaluation, artifact verification, viewer export, remediation brief with its Bifrost and Tavily clients, CLI |
 | `sandboxes/` | Dockerfiles, workers and provisioning for the Python, TypeScript, C and Rust packs |
 | `evidence/` | Retained real container runs, the fixed-v2 runtime acceptance and the image provisioning record |
-| `viewer/` | React and TypeScript read-only viewer; `public/demo.json` is the bundled demo |
+| `viewer/` | React and TypeScript evidence workspace; `public/review.json` contains the saved lab review |
 | `scripts/` | Repository hygiene audit; `live-brief/` reproduces the live Bifrost and Tavily check |
 | `tests/` | pytest suite |
 | `docs/` | Architecture, user guide, operations, remediation brief, v2 contract, codec contract, tool matrix, threat model, evaluation protocol, evidence, and the pitch deck (`docs/pitch/`, PowerPoint and PDF) |

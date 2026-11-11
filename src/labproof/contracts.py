@@ -1,6 +1,8 @@
 """Small embedded contract validator; no sibling-package dependency."""
 from datetime import datetime
 import json
+from math import isfinite
+import os
 from pathlib import Path
 import re
 import stat
@@ -37,10 +39,16 @@ def _reject_constant(_):
     raise ValidationError("Nonfinite JSON number")
 
 
+def _parse_float(value):
+    number = float(value)
+    require(isfinite(number), "Nonfinite JSON number")
+    return number
+
+
 def parse_json(raw: bytes):
     require(len(raw) <= MAX_FILE_BYTES, "JSON size limit exceeded")
     try:
-        return json.loads(raw.decode("utf-8"), object_pairs_hook=_pairs, parse_constant=_reject_constant)
+        return json.loads(raw.decode("utf-8"), object_pairs_hook=_pairs, parse_constant=_reject_constant, parse_float=_parse_float)
     except (UnicodeError, ValueError, RecursionError) as exc:
         raise ValidationError(f"Invalid JSON: {exc}") from exc
 
@@ -69,10 +77,26 @@ def safe_relative(value):
     return parts
 
 
+def _is_link(st) -> bool:
+    return stat.S_ISLNK(st.st_mode) or bool(getattr(st, "st_file_attributes", 0) & 0x400)
+
+
+def _link_message(item: Path) -> str:
+    # ascii() keeps control characters in untrusted bundle names from reaching a terminal.
+    message = f"Symlink/reparse point forbidden: {ascii(str(item))}"
+    try:
+        real = os.path.realpath(item)
+    except (OSError, ValueError):
+        return message
+    if real != str(item):
+        message += f" (resolves to {ascii(real)})"
+    return message
+
+
 def check_no_links(path: Path):
     for item in (path, *path.parents):
-        st = item.lstat()
-        require(not stat.S_ISLNK(st.st_mode) and not getattr(st, "st_file_attributes", 0) & 0x400, "Symlink/reparse point forbidden")
+        if _is_link(item.lstat()):
+            raise ValidationError(_link_message(item))
 
 
 def read_safe(root: Path, relative: str) -> bytes:

@@ -155,11 +155,13 @@ def _acceptance_report(report, config, limits):
     return workers
 
 
-def _verify(root):
+def _verify(root, *, expected_manifest=None):
     root = Path(root).absolute()
     check_no_links(root)
     require(root.is_dir(), "Run directory missing")
-    manifest = parse_json(read_safe(root, "manifest.json"))
+    raw = read_safe(root, "manifest.json")
+    require(expected_manifest is None or raw == expected_manifest, "Manifest changed before local verification")
+    manifest = parse_json(raw)
     validate_manifest(manifest)
     require(manifest["mode"] == "local", "Expected local run")
     versioned_config = parse_json(read_safe(root, "config.json"))
@@ -308,9 +310,9 @@ def _verify(root):
             "limitation": "Internal consistency only; unsigned runtime/canary records are not authenticity or proof that execution occurred."}
 
 
-def verify_local(root):
+def verify_local(root, *, expected_manifest=None):
     try:
-        return _verify(root)
+        return _verify(root, expected_manifest=expected_manifest)
     except ValidationError:
         raise
     except (OSError, ValueError, TypeError, KeyError, AttributeError, RecursionError, OverflowError) as exc:

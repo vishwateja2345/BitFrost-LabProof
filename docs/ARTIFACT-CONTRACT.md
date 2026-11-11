@@ -6,6 +6,8 @@ Events: `{sequence: 1, type: "run_started", run_id: "...", timestamp: "ISO", dat
 
 Report common fields: `project_id`, `run_id`, `mode`, `title`, `summary`, `limitations` (string array), `evidence` (array of objects with unique `id`). LabProof adds `findings`; a finding has a unique `id` and `evidence_ids` referencing report evidence.
 
+The [viewer bundle schema](viewer-bundle.schema.json) describes the JSON produced by `export-viewer`, including optional remediation from `--brief`. Load the run envelope schema alongside it to resolve the relative reference. Exports support replay and local reports up to 5 MiB and enforce the browser's limits on text length, nesting, and JSON values. Browser imports check identities, references, and retained quotations. Use the CLI with the original directories to verify registered hashes and report semantics.
+
 CLI conventions after installation:
 - `python -m labproof demo --output DIR`
 - `python -m labproof verify-artifacts DIR`

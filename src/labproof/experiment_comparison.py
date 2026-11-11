@@ -18,7 +18,7 @@ def _snapshot(directory):
     manifest = parse_json(manifest_raw)
     validate_manifest(manifest)
     with tempfile.TemporaryDirectory(prefix="labproof-compare-") as scratch:
-        copy = Path(scratch)
+        copy = Path(scratch).resolve(strict=True)
         write_new(copy / "manifest.json", manifest_raw)
         for row in manifest["artifacts"]:
             raw = read_safe(root, row["path"])

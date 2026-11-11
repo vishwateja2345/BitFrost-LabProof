@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Live check: `labproof brief --live` against a real Bifrost gateway container, a real local language model served by
-# Ollama and the real Tavily API. Needs Docker on Linux or WSL2 (the container uses host networking), Python 3.12+, curl,
+# Ollama and the real Tavily API. Needs Docker, Python 3.12+, curl,
 # an Ollama server with the model already pulled, and TAVILY_API_KEY in the environment. One run of a single-class
 # pack costs about 1 Tavily credit per search mode; the three-class replay costs about 3. See docs/BRIEF.md.
 #
@@ -19,6 +19,7 @@ ROOT="$(cd "$HERE/../.." && pwd)"
 IMAGE="${BIFROST_IMAGE:-maximhq/bifrost:v2.4.0}"
 PORT="${GATEWAY_PORT:-8080}"
 OLLAMA_URL="${OLLAMA_URL:-http://127.0.0.1:11434}"
+OLLAMA_PROVIDER_URL="${OLLAMA_PROVIDER_URL:-}"
 LIVE_MODEL="${LIVE_MODEL:-qwen2.5:3b}"
 MODES="${MODES-direct relay}"   # an empty MODES only starts the gateway (with KEEP_GATEWAY=1 it stays up)
 RUN_DIR="${RUN_DIR:-$ROOT/evidence/local-python-01}"
@@ -28,6 +29,22 @@ OUT="${OUT_DIR:-$ROOT/runs/live-brief-$(date +%Y%m%d-%H%M%S)}"
 PYTHON_BIN="${PYTHON:-python3}"
 NAME="labproof-bifrost-$$"
 WORK="$(mktemp -d)"
+network=(--network host)
+bind_host=127.0.0.1
+platform="$(uname -s)"
+if [ "$platform" = Darwin ] || [ -n "${BIFROST_DOCKER_NETWORK:-}" ]; then
+  network=(--network "${BIFROST_DOCKER_NETWORK:-bridge}" -p "127.0.0.1:$PORT:$PORT")
+  bind_host=0.0.0.0
+fi
+if [ -z "$OLLAMA_PROVIDER_URL" ]; then
+  OLLAMA_PROVIDER_URL="$OLLAMA_URL"
+  if [ "$platform" = Darwin ]; then
+    case "$OLLAMA_URL" in
+      http://127.0.0.1:*) OLLAMA_PROVIDER_URL="http://host.docker.internal:${OLLAMA_URL#http://127.0.0.1:}" ;;
+      http://localhost:*) OLLAMA_PROVIDER_URL="http://host.docker.internal:${OLLAMA_URL#http://localhost:}" ;;
+    esac
+  fi
+fi
 
 cleanup() {
   # A gateway left running keeps its SQLite files in $WORK, so keep that directory with it.
@@ -50,17 +67,29 @@ sys.exit(0 if wanted in names or wanted + ":latest" in names else "model " + wan
 export BIFROST_VIRTUAL_KEY="${BIFROST_VIRTUAL_KEY:-sk-bf-$("$PYTHON_BIN" -c 'import secrets; print(secrets.token_hex(16))')}"
 SETUP_TOKEN="$("$PYTHON_BIN" -c 'import secrets; print(secrets.token_hex(16))')"   # only protects the gateway's /api routes
 mkdir -p "$WORK/data" "$OUT"
-sed "s/\"default_request_timeout_in_seconds\": 55/\"default_request_timeout_in_seconds\": $((CALL_TIMEOUT - 5))/" "$HERE/config.json" >"$WORK/data/config.json"
-grep -q "\"default_request_timeout_in_seconds\": $((CALL_TIMEOUT - 5))," "$WORK/data/config.json" || { echo "could not set the provider timeout in the gateway config" >&2; exit 2; }
+"$PYTHON_BIN" - "$HERE/config.json" "$WORK/data/config.json" "$LIVE_MODEL" "$OLLAMA_PROVIDER_URL" "$((CALL_TIMEOUT - 5))" <<'PY'
+import json
+from pathlib import Path
+import sys
+
+template, output, model, provider_url, timeout = sys.argv[1:]
+config = json.loads(Path(template).read_text(encoding="utf-8"))
+provider = config["providers"]["ollama"]
+provider["network_config"].update(base_url=provider_url, allow_private_network=True, default_request_timeout_in_seconds=int(timeout))
+provider["keys"][0].update(models=[model], ollama_key_config={"url": provider_url})
+config["governance"]["virtual_keys"][0]["provider_configs"][0]["allowed_models"] = [model]
+Path(output).write_text(json.dumps(config), encoding="utf-8")
+PY
 chmod -R a+rwX "$WORK/data"
-CA=()
 # Behind a TLS-inspecting proxy the gateway must trust the host's CA bundle to reach api.tavily.com.
-[ -f /etc/ssl/certs/ca-certificates.crt ] && CA=(-v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro)
+if [ -f /etc/ssl/certs/ca-certificates.crt ]; then
+  network+=(-v /etc/ssl/certs/ca-certificates.crt:/etc/ssl/certs/ca-certificates.crt:ro)
+fi
 
 docker image inspect "$IMAGE" >/dev/null 2>&1 || docker pull "$IMAGE"
-docker run -d --name "$NAME" --network host "${CA[@]}" \
-  -e APP_HOST=127.0.0.1 -e APP_PORT="$PORT" -e BIFROST_SETUP_TOKEN="$SETUP_TOKEN" \
-  -e BIFROST_VIRTUAL_KEY -e TAVILY_API_KEY -e "OLLAMA_URL=$OLLAMA_URL" \
+docker run -d --name "$NAME" "${network[@]}" \
+  -e APP_HOST="$bind_host" -e APP_PORT="$PORT" -e BIFROST_SETUP_TOKEN="$SETUP_TOKEN" \
+  -e BIFROST_VIRTUAL_KEY -e TAVILY_API_KEY \
   -v "$WORK/data:/app/data" "$IMAGE" >/dev/null
 for _ in $(seq 1 90); do curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break; sleep 1; done
 if ! curl -fsS "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
@@ -87,6 +116,7 @@ for mode in $MODES; do
   echo "$mode: labproof brief exit code $code (0 = every class sourced, 2 = partial, 1 = refused)"
   if [ "$code" -eq 1 ]; then status=1; continue; fi
   "$PYTHON_BIN" -m labproof verify-brief "$RUN_DIR" "$OUT/$mode" >"$OUT/$mode-verify.json" || { echo "$mode: verify-brief FAILED" >&2; status=1; continue; }
+  if [ "$code" -eq 2 ] && [ "$status" -eq 0 ]; then status=2; fi
   "$PYTHON_BIN" - "$OUT/$mode/brief.json" <<'PY'
 import json, sys
 brief = json.load(open(sys.argv[1], encoding="utf-8"))

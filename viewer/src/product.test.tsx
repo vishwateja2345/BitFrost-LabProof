@@ -13,7 +13,7 @@ function preload(value: unknown) {
 function upload(value: unknown) {
   const text = JSON.stringify(value);
   const file = new File([text], 'import.json', { type: 'application/json' });
-  Object.defineProperty(file, 'text', { value: async () => text });
+  Object.defineProperty(file, 'arrayBuffer', { value: async () => new TextEncoder().encode(text).buffer });
   fireEvent.change(screen.getByLabelText('Import JSON bundle'), { target: { files: [file] } });
 }
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -48,10 +48,10 @@ describe('LabProof viewer', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Previous bundle retained');
     expect(screen.getByRole('textbox', { name: 'Search artifacts' })).toHaveValue('Synthetic');
     expect(screen.getByRole('heading', { name: 'Synthetic observation' })).toBeInTheDocument();
-    expect(screen.getByText('Bundled demo')).toBeInTheDocument();
+    expect(screen.getByText('Saved lab review')).toBeInTheDocument();
     upload(fixture());
-    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
-    expect(screen.getByText('import.json')).toBeInTheDocument();
+    expect(await screen.findByText('import.json')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
   it('loads actual blocked LabProof v2 and retains it on unknown-version or false-completion imports', async () => {
     preload(actualBlocked); render(<App />);

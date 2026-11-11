@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "LabProof viewer bundle v1",
+  "description": "JSON exported by labproof export-viewer. Run identity, evidence references, quote containment and artifact integrity require runtime checks.",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "runs"],
+  "properties": {
+    "schema_version": {"const": "1.0"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "runs": {"type": "array", "maxItems": 100, "items": {"$ref": "#/$defs/run"}},
+    "annotations": {"type": "array"},
+    "limitations": {"$ref": "#/$defs/strings"},
+    "source_report_sha256": {"$ref": "#/$defs/digest"},
+    "remediation": {"$ref": "#/$defs/brief"}
+  },
+  "$defs": {
+    "strings": {"type": "array", "maxItems": 10000, "items": {"type": "string"}},
+    "id": {"type": "string", "minLength": 1, "maxLength": 200},
+    "digest": {"type": "string", "pattern": "^[a-f0-9]{64}$"},
+    "run": {
+      "type": "object",
+      "required": ["manifest", "report", "events"],
+      "properties": {
+        "manifest": {"$ref": "run-envelope.schema.json"},
+        "report": {"$ref": "#/$defs/report"},
+        "events": {"type": "array", "maxItems": 10000, "items": {"$ref": "#/$defs/event"}}
+      }
+    },
+    "report": {
+      "type": "object",
+      "required": ["project_id", "run_id", "mode", "title", "summary", "limitations", "evidence", "findings"],
+      "properties": {
+        "project_id": {"const": "labproof"},
+        "run_id": {"$ref": "#/$defs/id"},
+        "mode": {"enum": ["replay", "local", "live"]},
+        "schema_version": {"enum": ["1.0", "local-report-1", "local-report-2"]},
+        "title": {"type": "string"},
+        "summary": {"type": "string"},
+        "limitations": {"$ref": "#/$defs/strings"},
+        "evidence": {
+          "type": "array", "maxItems": 10000,
+          "items": {"type": "object", "required": ["id"], "properties": {"id": {"$ref": "#/$defs/id"}}}
+        },
+        "findings": {
+          "type": "array", "maxItems": 10000,
+          "items": {
+            "type": "object", "required": ["id", "evidence_ids"],
+            "properties": {"id": {"$ref": "#/$defs/id"}, "evidence_ids": {"$ref": "#/$defs/strings", "uniqueItems": true}}
+          }
+        }
+      },
+      "if": {"properties": {"mode": {"const": "local"}}},
+      "then": {
+        "required": ["schema_version", "pack_id", "provenance"],
+        "properties": {
+          "schema_version": {"enum": ["local-report-1", "local-report-2"]},
+          "pack_id": {"type": "string", "minLength": 1},
+          "provenance": {"type": "object"}
+        }
+      },
+      "else": {"properties": {"schema_version": {"const": "1.0"}}}
+    },
+    "event": {
+      "type": "object", "required": ["sequence", "type", "run_id", "timestamp", "data"],
+      "properties": {
+        "sequence": {"type": "integer", "minimum": 1},
+        "type": {"type": "string", "minLength": 1},
+        "run_id": {"$ref": "#/$defs/id"},
+        "timestamp": {"type": "string", "format": "date-time"},
+        "data": {"type": "object"}
+      }
+    },
+    "brief": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "title", "generated_at", "mode", "source_run", "classes", "skipped", "search", "model", "limitations"],
+      "properties": {
+        "schema_version": {"const": "labproof-brief-1"},
+        "title": {"const": "LabProof remediation brief"},
+        "generated_at": {"type": "string", "format": "date-time"},
+        "mode": {"enum": ["demo", "live"]},
+        "source_run": {
+          "type": "object", "additionalProperties": false,
+          "required": ["run_id", "mode", "status", "manifest_sha256", "report_sha256"],
+          "properties": {
+            "run_id": {"$ref": "#/$defs/id"},
+            "mode": {"enum": ["replay", "local"]},
+            "status": {"const": "completed"},
+            "manifest_sha256": {"$ref": "#/$defs/digest"},
+            "report_sha256": {"$ref": "#/$defs/digest"}
+          }
+        },
+        "classes": {"type": "array", "maxItems": 3, "items": {"$ref": "#/$defs/briefClass"}},
+        "skipped": {"type": "array"},
+        "search": {
+          "type": "object", "additionalProperties": false,
+          "required": ["provider", "via", "calls", "credits"],
+          "properties": {
+            "provider": {"const": "tavily"},
+            "via": {"enum": ["tavily", "bifrost_relay", "scripted"]},
+            "calls": {"type": "integer", "minimum": 0, "maximum": 3},
+            "credits": {"type": ["number", "null"], "minimum": 0}
+          }
+        },
+        "model": {
+          "type": "object", "additionalProperties": false,
+          "required": ["via", "requested", "fallbacks", "calls", "tokens", "served_by"],
+          "properties": {
+            "via": {"enum": ["bifrost", "scripted"]},
+            "requested": {"type": "string", "minLength": 1},
+            "fallbacks": {"$ref": "#/$defs/strings", "maxItems": 3},
+            "calls": {"type": "integer", "minimum": 0, "maximum": 3},
+            "tokens": {"type": ["object", "null"]},
+            "served_by": {"type": "array", "maxItems": 8}
+          }
+        },
+        "limitations": {"$ref": "#/$defs/strings"}
+      },
+      "if": {"properties": {"mode": {"const": "demo"}}},
+      "then": {"properties": {"search": {"properties": {"via": {"const": "scripted"}}}, "model": {"properties": {"via": {"const": "scripted"}}}}},
+      "else": {"properties": {"search": {"properties": {"via": {"enum": ["tavily", "bifrost_relay"]}}}, "model": {"properties": {"via": {"const": "bifrost"}}}}}
+    },
+    "briefClass": {
+      "type": "object", "additionalProperties": false,
+      "required": ["check_id", "title", "severity", "severity_reason", "findings", "query", "domains", "status", "failure", "sources", "recommendations", "rejected"],
+      "properties": {
+        "check_id": {"$ref": "#/$defs/id"},
+        "title": {"type": "string", "minLength": 1},
+        "severity": {"enum": ["high", "medium", "low"]},
+        "severity_reason": {"type": "string"},
+        "findings": {
+          "type": "array", "minItems": 1,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["id", "variant", "evidence_count"],
+            "properties": {"id": {"$ref": "#/$defs/id"}, "variant": {"type": "string"}, "evidence_count": {"type": "integer", "minimum": 0}}
+          }
+        },
+        "query": {"type": "string", "minLength": 1, "maxLength": 300},
+        "domains": {"$ref": "#/$defs/strings", "minItems": 1},
+        "status": {"enum": ["sourced", "no_verified_advice", "no_sources", "search_failed", "model_failed"]},
+        "failure": {"type": ["object", "null"]},
+        "sources": {"type": "array", "maxItems": 3, "items": {"$ref": "#/$defs/source"}},
+        "recommendations": {"type": "array", "maxItems": 3, "items": {"$ref": "#/$defs/recommendation"}},
+        "rejected": {"type": "array", "maxItems": 6}
+      },
+      "if": {"properties": {"status": {"const": "sourced"}}},
+      "then": {"properties": {"recommendations": {"minItems": 1}}},
+      "else": {"properties": {"recommendations": {"maxItems": 0}}}
+    },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["id", "title", "url", "excerpt", "excerpt_sha256", "published_date"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "title": {"type": "string", "maxLength": 300},
+        "url": {"type": "string", "format": "uri", "pattern": "^https?://"},
+        "excerpt": {"type": "string", "minLength": 1, "maxLength": 3000},
+        "excerpt_sha256": {"$ref": "#/$defs/digest"},
+        "published_date": {"type": ["string", "null"], "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"}
+      }
+    },
+    "recommendation": {
+      "type": "object", "additionalProperties": false, "required": ["id", "text", "quotes"],
+      "properties": {
+        "id": {"$ref": "#/$defs/id"},
+        "text": {"type": "string", "minLength": 1},
+        "quotes": {
+          "type": "array", "minItems": 1, "maxItems": 3,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["source_id", "quote"],
+            "properties": {"source_id": {"$ref": "#/$defs/id"}, "quote": {"type": "string", "minLength": 20, "maxLength": 300}}
+          }
+        }
+      }
+    }
+  }
+}
