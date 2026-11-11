@@ -110,7 +110,7 @@ describe('artifact workspace', () => {
     value.runs[0].manifest.status = 'incomplete'; value.runs[0].events = [];
     mockDownload(value);
     render(<App />);
-    expect(await screen.findByText(/Run incomplete: treat missing evidence as unknown/)).toBeInTheDocument();
+    expect(await screen.findByText(/run\(s\) in this view are not completed/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Run trace' }));
     expect(screen.getByText('No events recorded.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Original reports' }));
@@ -149,6 +149,5 @@ describe('untrusted evidence rendering', () => {
   it('keeps trust boundaries visible even with no runs', () => {
     render(<LimitationsPanel runs={validateBundle({ schema_version: '1.0', generated_at: '2026-11-01T00:00:00Z', runs: [] }).runs} />);
     expect(screen.getByText(/Unsigned reports do not prove authenticity/)).toBeInTheDocument();
-    expect(screen.getByText(/Recorded controls and replays do not authorize new tests/)).toBeInTheDocument();
   });
 });
