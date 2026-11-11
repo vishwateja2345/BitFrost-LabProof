@@ -4,7 +4,7 @@
 
 LabProof answers one narrow question honestly: *did this program really leak data, and do we have the evidence to say so?* It runs purpose-built vulnerable and corrected program pairs (Python, TypeScript, C and Rust) in locked-down containers, records what they return, and reports each finding as **confirmed**, **rejected** or **inconclusive** only when the positive observations, the normal-use controls and the corrected-twin controls all agree, twice, in fresh containers. Every run is written as hash-registered artifacts that anyone can re-verify offline.
 
-It is a bounded harness, not a scanner and not an autonomous pentesting agent: there is no input for a URL, host, port, header, payload or command, and nothing outside the fixed synthetic fixtures can be reached. Python 3.12+, standard library only. Every default command is offline and needs no credentials; the one network path is the opt-in `brief --live`, described under [Bifrost and Tavily](#bifrost-and-tavily-the-sourced-remediation-brief).
+It is a bounded replay/evidence harness, not a scanner: the `labproof` commands above have no input for a URL, host, port, header, payload or command, and nothing outside the fixed synthetic fixtures can be reached. Python 3.12+, standard library only. Every default command is offline and needs no credentials; the network paths are the opt-in `brief --live` (below) and the separate autonomous pentest agent in [`src/labproof/pentest/`](docs/PENTEST.md), built for the Bifrost hackathon's "agent that pentests a target on its own" problem statement — a strictly scope-bounded agent that uses real recon tools and, optionally, Bifrost-backed reasoning against hosts an operator explicitly authorizes in a scope file. See [docs/PENTEST.md](docs/PENTEST.md).
 
 ![LabProof viewer showing five verified runs: a replay and four real container runs](docs/screenshots/viewer-overview.png)
 
@@ -28,6 +28,7 @@ python -m venv .venv
 # Linux/macOS:      source .venv/bin/activate
 python -m pip install .
 
+mkdir -p runs
 python -m labproof demo --output runs/demo                 # frozen synthetic replay, offline
 python -m labproof verify-artifacts runs/demo
 python -m labproof export-viewer runs/demo --output runs/demo-viewer.json
@@ -59,7 +60,9 @@ npm ci
 npm run dev            # serves the bundled demo (replay plus the four real runs) on http://127.0.0.1:5173
 ```
 
-Import your own bundle with **Import bundle** (up to 5 MiB; it stays in the browser). The viewer shows text only, never executes imported content, and states that it is not an independent verifier.
+The viewer opens the five-run demo by default. Select a finding to compare the expected behavior, recorded result, and linked controls. Search and filter by run or result status, then switch to **Evidence ledger**, **Run trace**, or **Original reports** to inspect the underlying records.
+
+Use **Import bundle** to open a JSON file produced by `export-viewer` (up to 5 MiB). The file stays in your browser. **Open demo** returns to the bundled runs. For offline consistency verification, run `verify-artifacts` against the full run directory.
 
 ### Running the language packs yourself
 

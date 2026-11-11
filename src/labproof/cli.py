@@ -63,6 +63,35 @@ def main(argv=None):
     verify_brief = commands.add_parser("verify-brief", help="Check a brief against its source run and its retained excerpts; makes no network call")
     verify_brief.add_argument("run", type=Path)
     verify_brief.add_argument("brief", type=Path)
+    commands.add_parser("pentest-scope-example", help="Print an editable example pentest scope file")
+    pentest = commands.add_parser("pentest", help="Run the autonomous, scope-bounded pentest agent into a NEW output directory. "
+                                  "Offline deterministic planner by default; add --model/--gateway-url/--gateway-token-env for "
+                                  "Bifrost-backed reasoning. Every proposed action is re-validated against --scope before execution.")
+    pentest.add_argument("--scope", type=Path, required=True, help="Scope file; see pentest-scope-example")
+    pentest.add_argument("--output", type=Path, required=True)
+    pentest.add_argument("--model", help="Bifrost model, for example provider/model; enables the reasoning planner")
+    pentest.add_argument("--gateway-url", help="Bifrost origin: loopback HTTP or a remote HTTPS hostname")
+    pentest.add_argument("--gateway-token-env", help="Name of the environment variable holding the Bifrost virtual key")
+    pentest.add_argument("--fallback", action="append", default=[], help="Requested Bifrost fallback model; repeatable, at most 3")
+    pentest.add_argument("--gateway-timeout", type=float, help="Seconds allowed per model call, 1-180 (default 60)")
+    pentest.add_argument("--json-mode", action="store_true", help="Also send response_format json_object (a gateway/provider may ignore or reject it)")
+    pbrief = commands.add_parser("pentest-brief", help="Write a sourced remediation brief for a verified pentest run: offline --demo, or opt-in --live with Tavily and a Bifrost gateway")
+    pbrief.add_argument("run", type=Path, help="A completed pentest run directory that passes verify-artifacts")
+    pbrief.add_argument("--output", type=Path, required=True, help="NEW directory for remediation.json")
+    pbrief.add_argument("--demo", action="store_true", help="Scripted providers and invented excerpts; no network, no credentials")
+    pbrief.add_argument("--live", action="store_true", help="Real research and model calls; needs --confirm-outbound")
+    pbrief.add_argument("--confirm-outbound", action="store_true", help="Consent to send the fixed queries to Tavily and public excerpts to the gateway")
+    pbrief.add_argument("--gateway-url", help="Bifrost origin: loopback HTTP or a remote HTTPS hostname")
+    pbrief.add_argument("--model", help="Bifrost model, for example provider/model")
+    pbrief.add_argument("--fallback", action="append", default=[], help="Requested Bifrost fallback model; repeatable, at most 3")
+    pbrief.add_argument("--gateway-token-env", help="Name of the environment variable holding the Bifrost virtual key")
+    pbrief.add_argument("--tavily-key-env", help="Name of the environment variable holding the Tavily API key")
+    pbrief.add_argument("--search-relay", help="Search through this Bifrost relay (the Tavily key stays in the gateway)")
+    pbrief.add_argument("--gateway-timeout", type=float, help="Seconds allowed per model call, 1-180 (default 60)")
+    pbrief.add_argument("--json-mode", action="store_true", help="Also send response_format json_object (a gateway/provider may ignore or reject it)")
+    verify_pbrief = commands.add_parser("verify-pentest-brief", help="Check a pentest remediation brief against its source run; makes no network call")
+    verify_pbrief.add_argument("run", type=Path)
+    verify_pbrief.add_argument("brief", type=Path)
     args = parser.parse_args(argv)
     try:
         if args.command == "compare-experiments":
@@ -129,6 +158,25 @@ def main(argv=None):
         if args.command == "verify-brief":
             from .brief import verify_brief
             print(json.dumps(verify_brief(args.run, args.brief), indent=2))
+            return 0
+        if args.command == "pentest-scope-example":
+            from .pentest.scope import example_scope
+            print(json.dumps(example_scope(), indent=2))
+            return 0
+        if args.command == "pentest":
+            from .pentest.cli_support import pentest_from_args
+            manifest = pentest_from_args(args, os.environ)
+            print(json.dumps({"run_id": manifest["run_id"], "mode": manifest["mode"], "status": manifest["status"],
+                              "output": str(args.output.absolute())}, indent=2))
+            return 0 if manifest["status"] == "completed" else 2
+        if args.command == "pentest-brief":
+            from .pentest.remediation import remediation_from_args
+            result = remediation_from_args(args, os.environ)
+            print(json.dumps(result, indent=2))
+            return 0 if result["status"] == "completed" else 2
+        if args.command == "verify-pentest-brief":
+            from .pentest.remediation import verify_pentest_remediation
+            print(json.dumps(verify_pentest_remediation(args.run, args.brief), indent=2))
             return 0
         if args.command == "packs":
             from .packs import REGISTRY
