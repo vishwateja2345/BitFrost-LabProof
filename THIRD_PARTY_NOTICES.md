@@ -14,4 +14,4 @@ The worker Dockerfiles in `sandboxes/` start from externally supplied, digest-pi
 
 ## Viewer dependencies
 
-The Python package has no runtime dependencies. The viewer is built with React (MIT), lucide-react (ISC), Vite and Vitest (MIT), TypeScript (Apache-2.0), jsdom and Testing Library (MIT); the exact versions are pinned in `viewer/package-lock.json`. Each keeps its own license. The stylesheet names the typeface Inter but ships no font files.
+The Python package has no runtime dependencies. The viewer is built with React (MIT), lucide-react (ISC), Vite and Vitest (MIT), TypeScript (Apache-2.0), jsdom and Testing Library (MIT); the exact versions are pinned in `viewer/package-lock.json`. Each keeps its own license. The viewer ships [Instrument Serif](https://github.com/Instrument/instrument-serif) under the SIL Open Font License 1.1. The license is included in [viewer/public/fonts](viewer/public/fonts/InstrumentSerif-OFL.txt).

@@ -1,6 +1,7 @@
 """Small embedded contract validator; no sibling-package dependency."""
 from datetime import datetime
 import json
+from math import isfinite
 import os
 from pathlib import Path
 import re
@@ -38,10 +39,16 @@ def _reject_constant(_):
     raise ValidationError("Nonfinite JSON number")
 
 
+def _parse_float(value):
+    number = float(value)
+    require(isfinite(number), "Nonfinite JSON number")
+    return number
+
+
 def parse_json(raw: bytes):
     require(len(raw) <= MAX_FILE_BYTES, "JSON size limit exceeded")
     try:
-        return json.loads(raw.decode("utf-8"), object_pairs_hook=_pairs, parse_constant=_reject_constant)
+        return json.loads(raw.decode("utf-8"), object_pairs_hook=_pairs, parse_constant=_reject_constant, parse_float=_parse_float)
     except (UnicodeError, ValueError, RecursionError) as exc:
         raise ValidationError(f"Invalid JSON: {exc}") from exc
 

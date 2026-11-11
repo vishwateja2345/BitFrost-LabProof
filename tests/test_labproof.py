@@ -329,7 +329,7 @@ def test_event_damage_even_if_manifest_rehashed(run, damage):
 
 
 def test_duplicate_json_and_nonfinite():
-    for value in [b'{"a":1,"a":2}', b'{"a":NaN}', b'{"a":Infinity}', b'\xff']:
+    for value in [b'{"a":1,"a":2}', b'{"a":NaN}', b'{"a":Infinity}', b'{"a":1e999}', b'\xff']:
         with pytest.raises(ValidationError):
             parse_json(value)
 

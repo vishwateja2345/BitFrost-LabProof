@@ -5,6 +5,8 @@ import { EvidenceInspector, SourceLink } from './components/EvidenceInspector';
 import { LimitationsPanel } from './components/LimitationsPanel';
 import { validateBundle } from './contracts';
 import { fixture } from './test-fixture';
+import bundledReview from '../public/review.json';
+import directBrief from '../../evidence/live-brief-01/direct/brief.json';
 
 function mockDownload(value: unknown = fixture()) {
   const bytes = new TextEncoder().encode(JSON.stringify(value));
@@ -15,13 +17,25 @@ beforeEach(() => { mockDownload(); });
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe('artifact workspace', () => {
+  it('opens retained citations from a confirmed finding and returns to its run', async () => {
+    mockDownload(bundledReview);
+    render(<App />);
+    fireEvent.click(await screen.findByRole('button', { name: 'View cited remediation' }));
+    expect(screen.getByRole('heading', { name: 'Remediation brief' })).toBeInTheDocument();
+    expect(screen.getByText('Retained live provider run')).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /broken object level authorization/i })[0]).toHaveAttribute('rel', 'noopener noreferrer');
+    fireEvent.click(screen.getByRole('button', { name: 'Synthetic cross-user object authorization' }));
+    expect(screen.getByRole('combobox', { name: 'Pack and run' })).toHaveValue(bundledReview.remediation.source_run.run_id);
+    expect(screen.getByRole('button', { name: 'View cited remediation' })).toBeInTheDocument();
+  });
+
   it('loads real-shaped data, scopes results, and never claims integrity', async () => {
     render(<App />);
     expect(await screen.findByRole('button', { name: 'Synthetic observation' })).toBeInTheDocument();
     expect(screen.getByText('Integrity not verified')).toBeInTheDocument();
     expect(screen.getByText('Schema checked')).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(fetch).toHaveBeenCalledWith('./demo.json', expect.objectContaining({ credentials: 'omit', redirect: 'error' }));
+    expect(fetch).toHaveBeenCalledWith('./review.json', expect.objectContaining({ credentials: 'omit', redirect: 'error' }));
   });
   it('keeps every run available through the pack/run selector', async () => {
     const value = fixture();
@@ -62,11 +76,11 @@ describe('artifact workspace', () => {
     expect(screen.getByRole('heading', { name: 'Captured control' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Second control' })).toBeInTheDocument();
   });
-  it('does not silently replace an unavailable demo with sample data', async () => {
+  it('does not silently replace an unavailable saved review with sample data', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
     render(<App />);
     expect(await screen.findByRole('alert')).toHaveTextContent('No bundle loaded');
-    expect(screen.getByText('Your artifacts belong here')).toBeInTheDocument();
+    expect(screen.getByText('Open an evidence bundle')).toBeInTheDocument();
     expect(screen.getByText(/Local execution-pack archives cannot be imported or run here/)).toBeInTheDocument();
     expect(fetch).toHaveBeenCalledTimes(1);
   });
@@ -82,25 +96,25 @@ describe('artifact workspace', () => {
     render(<App />);
     await screen.findByRole('button', { name: 'Synthetic observation' });
     const file = new File(['{}'], 'invalid.json', { type: 'application/json' });
-    Object.defineProperty(file, 'text', { value: async () => '{}' });
+    Object.defineProperty(file, 'arrayBuffer', { value: async () => new TextEncoder().encode('{}').buffer });
     fireEvent.change(screen.getByLabelText('Import JSON bundle'), { target: { files: [file] } });
     expect(await screen.findByRole('alert')).toHaveTextContent('Previous bundle retained');
     expect(screen.getByRole('button', { name: 'Synthetic observation' })).toBeInTheDocument();
   });
-  it('returns to the bundled demo and clears the imported bundle view', async () => {
+  it('returns to the saved review and clears the imported bundle view', async () => {
     render(<App />);
-    await screen.findByText('Bundled demo');
+    await screen.findByText('Saved lab review');
     const raw = JSON.stringify(fixture());
     const file = new File([raw], 'review.json', { type: 'application/json' });
-    Object.defineProperty(file, 'text', { value: async () => raw });
+    Object.defineProperty(file, 'arrayBuffer', { value: async () => new TextEncoder().encode(raw).buffer });
     fireEvent.change(screen.getByLabelText('Import JSON bundle'), { target: { files: [file] } });
     await screen.findByText('review.json');
     fireEvent.change(screen.getByRole('textbox', { name: 'Search artifacts' }), { target: { value: 'missing' } });
     fireEvent.click(screen.getByRole('button', { name: 'Run trace' }));
     expect(screen.getByText('No runs match this view.')).toBeInTheDocument();
     mockDownload();
-    fireEvent.click(screen.getByRole('button', { name: 'Open demo' }));
-    await screen.findByText('Bundled demo');
+    fireEvent.click(screen.getByRole('button', { name: 'Open saved review' }));
+    await screen.findByText('Saved lab review');
     expect(screen.getByRole('button', { name: 'Results' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('textbox', { name: 'Search artifacts' })).toHaveValue('');
   });
@@ -115,6 +129,47 @@ describe('artifact workspace', () => {
     expect(screen.getByText('No events recorded.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Original reports' }));
     expect(screen.getByText('Original report JSON')).toBeInTheDocument();
+  });
+});
+
+describe('remediation bundle validation', () => {
+  it('accepts an actual direct Tavily brief alongside the retained relay brief', () => {
+    const direct = validateBundle({ ...bundledReview, remediation: directBrief }).remediation;
+    expect(direct?.searchVia).toBe('tavily');
+    expect(direct?.classes[0].recommendations).toHaveLength(1);
+  });
+
+  it('rejects wrong run bindings, fabricated quotations, and citation host lookalikes', () => {
+    const wrongRun = structuredClone(bundledReview);
+    wrongRun.remediation.source_run.report_sha256 = '0'.repeat(64);
+    expect(() => validateBundle(wrongRun)).toThrow('does not match a completed bundled run');
+
+    const wrongQuote = structuredClone(bundledReview);
+    wrongQuote.remediation.classes[0].recommendations[0].quotes[0].quote = 'Unrelated wording presented as a retained quotation';
+    expect(() => validateBundle(wrongQuote)).toThrow('quotation missing');
+
+    const wrongHost = structuredClone(bundledReview);
+    wrongHost.remediation.classes[0].sources[0].url = 'https://owasp.org.example.com/';
+    expect(() => validateBundle(wrongHost)).toThrow('citation host outside');
+  });
+
+  it('rejects a class whose title/severity/reason has been relabeled away from the fixed catalogue', () => {
+    // Same check_id, same genuinely-confirmed finding -- only the displayed severity/title/reason
+    // is tampered with, as if to misrepresent a real finding's class (e.g. inflate its severity).
+    const relabeled = structuredClone(bundledReview);
+    relabeled.remediation.classes[0].severity = 'low';
+    expect(() => validateBundle(relabeled)).toThrow('does not match the fixed catalogue');
+
+    const retitled = structuredClone(bundledReview);
+    retitled.remediation.classes[0].title = 'Totally different, made-up finding title';
+    expect(() => validateBundle(retitled)).toThrow('does not match the fixed catalogue');
+  });
+
+  it('rejects a class check_id that does not match its own catalogue entry', () => {
+    // An unknown/garbage check_id must never be accepted just because it carries a confirmed finding ID.
+    const unknownCheck = structuredClone(bundledReview);
+    unknownCheck.remediation.classes[0].check_id = 'not_a_real_check';
+    expect(() => validateBundle(unknownCheck)).toThrow('unknown remediation class');
   });
 });
 

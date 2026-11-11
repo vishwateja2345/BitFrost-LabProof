@@ -34,6 +34,8 @@ describe('bundle runtime contract', () => {
     ['invalid digest', (b: any) => { b.runs[0].manifest.artifacts[0].sha256 = 'not-a-hash'; }],
     ['negative bytes', (b: any) => { b.runs[0].manifest.artifacts[0].bytes = -1; }],
     ['invalid date', (b: any) => { b.generated_at = 'yesterday'; }],
+    ['overflowed calendar date', (b: any) => { b.generated_at = '2026-02-30T12:00:00Z'; }],
+    ['case-insensitive duplicate artifact path', (b: any) => { const a = b.runs[0].manifest.artifacts[0]; b.runs[0].manifest.artifacts.push({ ...a, path: a.path.toUpperCase() }); }],
     ['sequence gap', (b: any) => { b.runs[0].events[1].sequence = 3; }],
     ['event identity mismatch', (b: any) => { b.runs[0].events[0].run_id = 'other'; }],
     ['missing completion', (b: any) => { b.runs[0].events.pop(); }],
@@ -43,6 +45,7 @@ describe('bundle runtime contract', () => {
   ])('rejects %s', (_name, change) => { expect(() => validateBundle(mutate(change))).toThrow(); });
   it('rejects invalid JSON, oversized files, oversized text and nesting', () => {
     expect(() => parseBundle('{')).toThrow('invalid JSON');
+    expect(() => parseBundle('{"overflow":1e999}')).toThrow('supported range');
     expect(() => parseBundle(' '.repeat(MAX_BUNDLE_BYTES + 1))).toThrow('5 MiB');
     expect(() => validateBundle(mutate(b => { b.extra = 'x'.repeat(200_001); }))).toThrow();
     expect(() => validateBundle(mutate(b => { let tail = b; for (let i = 0; i < 34; i++) { tail.extra = {}; tail = tail.extra; } }))).toThrow('deeply nested');
@@ -64,7 +67,7 @@ describe('bundle runtime contract', () => {
 describe('safe navigation and paths', () => {
   it.each(['javascript:alert(1)', 'data:text/html,hello', 'file:///etc/passwd', 'https://user:pass@docs.example.org', 'https://localhost', 'https://x.local', 'http://127.0.0.1', 'http://2130706433', 'http://0x7f000001', 'http://10.0.0.1', 'https://[::1]', '//docs.example.org', 'https://docs.example.org\\@localhost', 'https://x.internal'])('blocks %s', value => { expect(safeSourceUrl(value)).toBeNull(); });
   it('allows explicit public HTTP(S) navigation', () => { expect(safeSourceUrl('https://docs.example.org/path?q=1')).toBe('https://docs.example.org/path?q=1'); });
-  it.each(['../a', '/a', 'a//b', 'a/./b', 'C:/a', 'a\\b', '%2e%2e/a', 'a\u0000b'])('rejects path %s', path => { expect(safeArtifactPath(path)).toBe(false); });
+  it.each(['../a', '/a', 'a//b', 'a/./b', 'C:/a', 'a\\b', '%2e%2e/a', 'a\u0000b', 'NUL.json', 'a.', 'a\n'])('rejects path %s', path => { expect(safeArtifactPath(path)).toBe(false); });
   it('accepts a registered-style POSIX path', () => { expect(safeArtifactPath('evidence/record.json')).toBe(true); });
 });
 

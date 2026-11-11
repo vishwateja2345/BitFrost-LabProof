@@ -30,6 +30,20 @@ def main(argv=None):
     export = commands.add_parser("export-viewer", help="Verify own runs and exclusively write a viewer bundle up to 5 MiB")
     export.add_argument("directories", type=Path, nargs="+")
     export.add_argument("--output", type=Path, required=True)
+    export.add_argument("--brief", type=Path, help="Include a verified remediation brief for the first run directory")
+    review = commands.add_parser("review-export", help="Require a one-use approval for a defensive viewer export")
+    review.add_argument("--ledger", type=Path, required=True, help="Local SQLite approval ledger")
+    review_commands = review.add_subparsers(dest="review_command", required=True)
+    approve = review_commands.add_parser("approve", help="Sign an approval for one local export")
+    redeem = review_commands.add_parser("redeem", help="Consume an approval and export the approved run")
+    revoke = review_commands.add_parser("revoke", help="Revoke an unused approval")
+    for operation in (approve, redeem):
+        operation.add_argument("directory", type=Path)
+        operation.add_argument("--task", required=True)
+        operation.add_argument("--output", type=Path, required=True)
+    approve.add_argument("--ttl", type=int, default=300, help="Approval lifetime in seconds (1–3600)")
+    for operation in (redeem, revoke):
+        operation.add_argument("--approval", type=Path, required=True)
     experiment_plan = commands.add_parser("experiment-plan", help="Print a bounded v2 plan; does not provision or execute tools")
     experiment_plan.add_argument("--pack", choices=["python", "typescript", "c", "rust"], required=True)
     experiments = commands.add_parser("experiments", help="Run a validated v2 plan; blocked without separately reviewed v2 provisioning")
@@ -133,7 +147,19 @@ def main(argv=None):
             return 0
         if args.command == "export-viewer":
             from .export_viewer import export_viewer
-            print(json.dumps(export_viewer(args.directories, args.output), indent=2))
+            print(json.dumps(export_viewer(args.directories, args.output, brief_dir=args.brief), indent=2))
+            return 0
+        if args.command == "review-export":
+            from .review_export import approve_export, load_key, read_approval, redeem_export, revoke_export
+            key = load_key(os.environ)
+            if args.review_command == "approve":
+                result = approve_export(args.directory, args.output, task=args.task, ledger=args.ledger, key=key, ttl=args.ttl)
+            elif args.review_command == "redeem":
+                result = redeem_export(args.directory, args.output, task=args.task, ledger=args.ledger, key=key,
+                                       approval=read_approval(args.approval))
+            else:
+                result = revoke_export(ledger=args.ledger, key=key, approval=read_approval(args.approval))
+            print(json.dumps(result, indent=2))
             return 0
         if args.command == "experiment-plan":
             from .local_profiles import default_experiment_plan

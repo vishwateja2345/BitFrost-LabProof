@@ -25,9 +25,19 @@ export interface Report extends JsonObject {
 }
 export interface RunEvent { sequence: number; type: string; run_id: string; timestamp: string; data: JsonObject }
 export interface Run { manifest: Manifest; report: Report; events: RunEvent[] }
+export interface RemediationSource { id: string; title: string; url: string; excerpt: string }
+export interface RemediationClass {
+  id: string; title: string; severity: string; reason: string; status: string;
+  findings: string[]; sources: RemediationSource[];
+  recommendations: { id: string; text: string; quotes: { source: RemediationSource; text: string }[] }[];
+}
+export interface Remediation {
+  mode: 'demo' | 'live'; runId: string; generatedAt: string; classes: RemediationClass[];
+  searchVia: string; searchCalls: number; model: string; modelCalls: number; skipped: number;
+}
 export interface Bundle {
   schema_version: '1.0'; generated_at: string; runs: Run[];
-  limitations?: string[]; source_report_sha256?: string;
+  limitations?: string[]; source_report_sha256?: string; remediation?: Remediation;
 }
 
 function fail(path: string, message: string): never { throw new Error(`${path}: ${message}`); }
@@ -49,7 +59,11 @@ function list(value: unknown, path: string): unknown[] {
 function strings(value: unknown, path: string): string[] { return list(value, path).map((v, i) => text(v, `${path}[${i}]`)); }
 function date(value: unknown, path: string): string {
   const result = text(value, path);
-  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(result) || !Number.isFinite(Date.parse(result))) fail(path, 'expected an ISO timestamp with timezone');
+  const parts = /^(\d{4})-(\d{2})-(\d{2})T(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.exec(result);
+  if (!parts || !Number.isFinite(Date.parse(result))) fail(path, 'expected an ISO timestamp with timezone');
+  const [, year, month, day] = parts;
+  const calendarDate = new Date(`${year}-${month}-${day}T00:00:00Z`);
+  if (year === '0000' || calendarDate.getUTCDate() !== Number(day)) fail(path, 'invalid calendar date');
   return result;
 }
 function choice<T extends string>(value: unknown, options: readonly T[], path: string): T {
@@ -65,8 +79,8 @@ function unique(values: string[], path: string) {
   if (new Set(values).size !== values.length) fail(path, 'duplicate identifier or path');
 }
 export function safeArtifactPath(value: string): boolean {
-  return value.length > 0 && value.length < 1024 && !/[\\:\u0000-\u001f\u007f%]/.test(value)
-    && value.split('/').every(part => part !== '' && part !== '.' && part !== '..');
+  return value.length <= 240 && !/[^A-Za-z0-9_./-]/.test(value) && value.split('/').every(part => /^[A-Za-z0-9_.-]*[A-Za-z0-9_-]$/.test(part)
+    && !/^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i.test(part));
 }
 // This is a navigation guard, not a DNS resolver or a source-authenticity check.
 export function safeSourceUrl(value: unknown): string | null {
@@ -87,6 +101,7 @@ function checkComplexity(root: unknown) {
     const [value, depth] = stack.pop()!;
     if (++count > 150_000 || depth > 32) fail('bundle', 'content is too large or too deeply nested');
     if (typeof value === 'string' && value.length > 200_000) fail('bundle', 'text field exceeds 200,000 characters');
+    if (typeof value === 'number' && !Number.isFinite(value)) fail('bundle', 'JSON number exceeds the supported range');
     if (value && typeof value === 'object') {
       for (const child of Object.values(value)) stack.push([child, depth + 1]);
     }
@@ -140,11 +155,14 @@ export function validateBundle(value: unknown): Bundle {
       if (!safeArtifactPath(artifactPath)) fail(`${path}.artifact.path`, 'unsafe relative path');
       const sha256 = text(a.sha256, `${path}.artifact.sha256`);
       if (!/^[a-f0-9]{64}$/.test(sha256)) fail(`${path}.artifact.sha256`, 'expected a SHA-256 digest');
-      if (typeof a.bytes !== 'number' || !Number.isSafeInteger(a.bytes) || a.bytes < 0) fail(`${path}.artifact.bytes`, 'expected a nonnegative integer');
+      if (typeof a.bytes !== 'number' || !Number.isInteger(a.bytes) || a.bytes < 0 || a.bytes > 2_000_000) fail(`${path}.artifact.bytes`, 'expected an integer between 0 and 2,000,000');
       return { path: artifactPath, sha256, bytes: a.bytes };
     });
-    if (!artifacts.length) fail(`${path}.artifacts`, 'at least one registered artifact is required');
-    unique(artifacts.map(a => a.path), `${path}.artifacts`);
+    if (!artifacts.length || artifacts.length > 128) fail(`${path}.artifacts`, 'expected 1–128 registered artifacts');
+    unique(artifacts.map(a => a.path.toLowerCase()), `${path}.artifacts`);
+    if (artifacts.some(a => a.path.toLowerCase() === 'manifest.json')) fail(`${path}.artifacts`, 'manifest cannot register itself');
+    if (artifacts.reduce((bytes, a) => bytes + a.bytes, 0) > 8_000_000) fail(`${path}.artifacts`, 'registered sizes exceed 8,000,000 bytes');
+    const artifactPaths = new Set(artifacts.map(a => a.path));
     const manifest: Manifest = { schema_version, project_id, run_id, mode, status,
       created_at: date(m.created_at, `${path}.created_at`), artifacts, limitations: strings(m.limitations, `${path}.limitations`) };
     const r = object(run.report, `${path}.report`);
@@ -167,7 +185,7 @@ export function validateBundle(value: unknown): Bundle {
       const evidenceId = id(e.id, `${path}.evidence.id`);
       if (e.artifact_path !== undefined && e.artifact_path !== null) {
         const relative = text(e.artifact_path, `${path}.evidence.artifact_path`);
-        if (!safeArtifactPath(relative) || !artifacts.some(a => a.path === relative)) fail(`${path}.evidence.artifact_path`, 'path must be safe and registered');
+        if (!artifactPaths.has(relative)) fail(`${path}.evidence.artifact_path`, 'path must be safe and registered');
       }
       const record = mode === 'local' ? localRecord(e.record, evidenceId, `${path}.evidence.record`) : undefined;
       if (e.record !== undefined && record === undefined) fail(`${path}.evidence.record`, 'local LabProof evidence only');
@@ -175,12 +193,13 @@ export function validateBundle(value: unknown): Bundle {
       return { ...e, id: evidenceId, ...(record ? { record } : {}) };
     });
     unique(evidence.map(e => e.id), `${path}.evidence`);
+    const evidenceIds = new Set(evidence.map(e => e.id));
     const items = list(r.findings, `${path}.report.findings`).map((rawItem): Item => {
       const item = object(rawItem, `${path}.findings`);
       const itemId = id(item.id, `${path}.findings.id`);
       const evidence_ids = strings(item.evidence_ids, `${path}.findings.evidence_ids`);
       unique(evidence_ids, `${path}.findings.evidence_ids`);
-      if (evidence_ids.some(ref => !evidence.some(e => e.id === ref))) fail(`${path}.findings`, 'unresolved evidence reference');
+      if (evidence_ids.some(ref => !evidenceIds.has(ref))) fail(`${path}.findings`, 'unresolved evidence reference');
       return { ...item, id: itemId, evidence_ids };
     });
     unique(items.map(item => item.id), `${path}.findings`);
@@ -200,9 +219,11 @@ export function validateBundle(value: unknown): Bundle {
     return { manifest, report, events };
   });
   unique(runs.map(run => run.manifest.run_id), 'runs');
+  const remediation = bundle.remediation === undefined ? undefined : parseRemediation(bundle.remediation, runs);
   return { schema_version: '1.0', generated_at, runs,
     ...(limitations === undefined ? {} : { limitations }),
-    ...(source_report_sha256 === undefined ? {} : { source_report_sha256 }) };
+    ...(source_report_sha256 === undefined ? {} : { source_report_sha256 }),
+    ...(remediation === undefined ? {} : { remediation }) };
 }
 export function parseBundle(raw: string): Bundle {
   if (new TextEncoder().encode(raw).byteLength > MAX_BUNDLE_BYTES) fail('bundle', 'maximum file size is 5 MiB');
@@ -210,8 +231,15 @@ export function parseBundle(raw: string): Bundle {
   try { value = JSON.parse(raw); } catch { fail('bundle', 'invalid JSON'); }
   return validateBundle(value);
 }
+export function parseBundleBytes(bytes: Uint8Array): Bundle {
+  if (bytes.byteLength > MAX_BUNDLE_BYTES) fail('bundle', 'maximum file size is 5 MiB');
+  let raw: string;
+  try { raw = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  catch { fail('bundle', 'expected UTF-8 JSON'); }
+  return parseBundle(raw);
+}
 export async function readBundleResponse(response: Response): Promise<Bundle> {
-  if (!response.ok) throw new Error('Demo bundle is not available. Import an exported bundle to begin.');
+  if (!response.ok) throw new Error('The saved review is not available. Import an exported bundle to begin.');
   if (Number(response.headers.get('content-length')) > MAX_BUNDLE_BYTES) throw new Error('Bundle exceeds 5 MiB.');
   if (!response.body) throw new Error('Bundle response is empty.');
   const reader = response.body.getReader();
@@ -229,7 +257,7 @@ export async function readBundleResponse(response: Response): Promise<Bundle> {
   const bytes = new Uint8Array(size);
   let offset = 0;
   for (const chunk of chunks) { bytes.set(chunk, offset); offset += chunk.length; }
-  return parseBundle(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+  return parseBundleBytes(bytes);
 }
 export function display(value: unknown, fallback = 'Not recorded'): string {
   if (value === undefined || value === null || value === '') return fallback;
@@ -239,3 +267,117 @@ export const itemsFor = (run: Run): Item[] => run.report.findings ?? [];
 export const itemTitle = (item: Item): string => display(item.title ?? item.text, item.id);
 export const itemStatus = (item: Item): string => display(item.status ?? item.verdict, 'NOT_RECORDED');
 export const projectName = (_project: Project): string => 'LabProof';
+
+// Mirrors brief.py's CATALOGUE exactly: fixed per finding class, never taken from the brief itself.
+const REMEDIATION_CATALOGUE: Record<string, { title: string; severity: string; reason: string }> = {
+  object_authorization: { title: 'Cross-user object access', severity: 'high',
+    reason: "One user could read another user's record (synthetic fixture)." },
+  html_reflection: { title: 'Unescaped reflection of harmless markup', severity: 'medium',
+    reason: 'Harmless marker markup came back unescaped in an HTML response; this is not script execution.' },
+  error_disclosure: { title: 'Verbose error disclosure', severity: 'low',
+    reason: 'A synthetic failure exposed canned trace and configuration markers instead of a generic message.' },
+};
+const LOCAL_PACKS = ['python', 'typescript', 'c', 'rust'];
+
+// Mirrors brief.py's classes_from_run: groups confirmed findings by their OWN check_id (never trusted
+// from the brief), with the same local-mode pack_id fallback to the fixed object_authorization class.
+function confirmedByCheck(run: Run): Map<string, Set<string>> {
+  const grouped = new Map<string, Set<string>>();
+  for (const item of itemsFor(run)) {
+    if (item.status !== 'confirmed') continue;
+    let check: string | undefined;
+    if (typeof item.check_id === 'string' && item.check_id in REMEDIATION_CATALOGUE) check = item.check_id;
+    else if (item.check_id === undefined && run.manifest.mode === 'local' && typeof item.pack_id === 'string' && LOCAL_PACKS.includes(item.pack_id)) {
+      check = 'object_authorization';
+    }
+    if (!check) continue;
+    if (!grouped.has(check)) grouped.set(check, new Set());
+    grouped.get(check)!.add(item.id);
+  }
+  return grouped;
+}
+
+function parseRemediation(value: unknown, runs: Run[]): Remediation {
+  const path = 'bundle.remediation';
+  const brief = object(value, path);
+  choice(brief.schema_version, ['labproof-brief-1'], path);
+  const mode = choice(brief.mode, ['demo', 'live'], `${path}.mode`);
+  const generatedAt = date(brief.generated_at, `${path}.generated_at`);
+  const sourceRun = object(brief.source_run, `${path}.source_run`);
+  const run = runs.find(candidate => candidate.manifest.run_id === sourceRun.run_id);
+  const reportHash = run?.manifest.artifacts.find(artifact => artifact.path === 'report.json')?.sha256;
+  if (!run || run.manifest.status !== 'completed' || sourceRun.status !== 'completed' || sourceRun.mode !== run.manifest.mode
+      || !reportHash || sourceRun.report_sha256 !== reportHash) fail(path, 'brief does not match a completed bundled run');
+
+  const grouped = confirmedByCheck(run);
+  const domains = mode === 'live' ? ['owasp.org', 'cwe.mitre.org'] : ['docs.example.org'];
+  const bounded = (raw: unknown, name: string) => {
+    const entries = list(raw, `${path}.${name}`);
+    if (entries.length > 3) fail(`${path}.${name}`, 'expected at most three entries');
+    return entries;
+  };
+
+  const classes = bounded(brief.classes, 'classes').map((raw): RemediationClass => {
+    const entry = object(raw, path);
+    const checkId = id(entry.check_id, path);
+    const catalogue = REMEDIATION_CATALOGUE[checkId];
+    if (!catalogue) fail(path, 'unknown remediation class');
+    if (entry.title !== catalogue.title || entry.severity !== catalogue.severity || entry.severity_reason !== catalogue.reason) {
+      fail(path, 'class title/severity/reason does not match the fixed catalogue for this check');
+    }
+    const confirmedForCheck = grouped.get(checkId) ?? new Set<string>();
+    const findings = list(entry.findings, path).map(finding => id(object(finding, path).id, path));
+    if (!findings.length || findings.some(finding => !confirmedForCheck.has(finding))) {
+      fail(path, 'brief references a finding without a confirmed result in this class');
+    }
+    unique(findings, path);
+
+    const sources = bounded(entry.sources, 'sources').map((rawSource): RemediationSource => {
+      const source = object(rawSource, path);
+      const url = safeSourceUrl(source.url);
+      if (!url) fail(path, 'invalid citation URL');
+      const host = new URL(url).hostname.replace(/\.$/, '');
+      if (!domains.some(domain => host === domain || host.endsWith(`.${domain}`))) fail(path, 'citation host outside the reviewed domains');
+      return { id: id(source.id, path), url, title: text(source.title, path), excerpt: text(source.excerpt, path, true) };
+    });
+    unique(sources.map(source => source.id), path);
+
+    const recommendations = bounded(entry.recommendations, 'recommendations').map(rawRecommendation => {
+      const recommendation = object(rawRecommendation, path);
+      const quotes = bounded(recommendation.quotes, 'quotes').map(rawQuote => {
+        const quote = object(rawQuote, path);
+        const source = sources.find(candidate => candidate.id === quote.source_id);
+        const wording = text(quote.quote, path, true);
+        if (!source || wording.length < 20 || wording.length > 300 || !source.excerpt.includes(wording)) {
+          fail(path, 'quotation missing from its retained source or outside the permitted length');
+        }
+        return { source, text: wording };
+      });
+      if (!quotes.length) fail(path, 'recommendation has no citations');
+      return { id: id(recommendation.id, path), text: text(recommendation.text, path, true), quotes };
+    });
+    unique(recommendations.map(recommendation => recommendation.id), path);
+
+    const status = choice(entry.status, ['sourced', 'no_verified_advice', 'no_sources', 'search_failed', 'model_failed'], path);
+    if ((status === 'sourced') !== Boolean(recommendations.length)) fail(path, 'recommendation count disagrees with brief status');
+    // title/severity/reason are taken from the fixed catalogue, not re-read from the brief: already
+    // proven equal above, but this keeps the trusted value unambiguous rather than merely checked.
+    return { id: checkId, title: catalogue.title, reason: catalogue.reason,
+      severity: catalogue.severity, status, findings, sources, recommendations };
+  });
+
+  unique(classes.map(entry => entry.id), path);
+  const search = object(brief.search, `${path}.search`);
+  const model = object(brief.model, `${path}.model`);
+  choice(search.provider, ['tavily'], `${path}.search.provider`);
+  choice(model.via, mode === 'live' ? ['bifrost'] : ['scripted'], `${path}.model.via`);
+  const searchVia = choice(search.via, mode === 'live' ? ['tavily', 'bifrost_relay'] : ['scripted'], `${path}.search.via`);
+  const calls = (value: unknown) => {
+    if (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > classes.length) fail(path, 'invalid provider call count');
+    return value;
+  };
+  const searchCalls = calls(search.calls);
+  if (searchCalls !== classes.length) fail(`${path}.search.calls`, 'expected one recorded search per finding class');
+  return { mode, generatedAt, runId: run.manifest.run_id, classes, searchVia, searchCalls,
+    model: model.requested === null ? '' : text(model.requested, path), modelCalls: calls(model.calls), skipped: list(brief.skipped, path).length };
+}

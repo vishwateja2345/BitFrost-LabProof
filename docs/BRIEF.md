@@ -94,6 +94,8 @@ TAVILY_API_KEY=... scripts/live-brief/run.sh                       # direct sear
 MODES=relay LIVE_MODEL=qwen2.5:3b CALL_TIMEOUT=150 scripts/live-brief/run.sh
 ```
 
+On Docker Desktop the script publishes Bifrost on loopback. With a host Ollama server, the gateway reaches it through `host.docker.internal`. When Ollama runs in another container, put both containers on a dedicated bridge. Set `BIFROST_DOCKER_NETWORK` to that network, `OLLAMA_PROVIDER_URL` to the Ollama container's address on it, and `OLLAMA_URL` to the Ollama endpoint reachable from your shell for the model check. The script authorizes the selected model on the virtual key and returns `2` when a saved brief is partial.
+
 Bifrost documents the request shapes the clients follow: `/v1/chat/completions` with an `x-bf-vk` virtual key, relays at `/relay/NAME/...`, and `fallbacks` in the request body ([docs.getbifrost.ai](https://docs.getbifrost.ai)). Tavily Search is documented at [docs.tavily.com](https://docs.tavily.com).
 
 ## What `verify-brief` checks
@@ -141,6 +143,8 @@ One Tavily `basic` search per confirmed class, so one credit for a pack run (one
 [`evidence/live-brief-01/`](../evidence/live-brief-01) holds the first real runs, made from the retained Python container run with a pinned Bifrost container, `ollama/qwen2.5:3b` on CPU and real Tavily searches. Both final runs (direct search and relay search) are `sourced` with one verified recommendation quoting an OWASP API Security Top 10 page; two earlier attempts are kept because they failed in instructive ways: a gateway timeout from the slow CPU-only model (`model_failed`) and a reply with its outer JSON brace missing (`no_verified_advice`). Its README lists the set-up, the credits used and what each attempt changed. Every record verifies with `verify-brief`.
 
 Two provider facts from those runs: the Bifrost relay carried the Tavily search with only the virtual key on the client, and Bifrost v2.4.0 accepted but ignored `response_format` for the Ollama provider (Ollama honoured it when called directly), which is why `--json-mode` is opt-in.
+
+[The Docker Desktop live record](../evidence/live-brief-02) preserves the fresh direct and relayed searches, the gateway outcomes, and the validation results for each model reply.
 
 ## Tests
 

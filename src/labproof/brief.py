@@ -465,16 +465,22 @@ def make_brief(run_dir, output, search, gateway, *, mode):
             "search_calls": brief["search"]["calls"], "model_calls": brief["model"]["calls"]}
 
 
-def verify_brief(run_dir, brief_dir):
+def read_verified_brief(brief_dir, manifest, report, manifest_sha, report_sha):
+    """Read a brief against the same verified source snapshot used by the caller."""
     root = Path(brief_dir).absolute()
     check_no_links(root)
     require(root.is_dir() and sorted(p.name for p in root.iterdir()) == ["brief.html", "brief.json"], "A brief directory holds exactly brief.json and brief.html")
-    manifest, report, manifest_sha, report_sha = load_run(run_dir)
     raw = read_safe(root, "brief.json")
     brief = parse_json(raw)
     recommendations = check_brief(brief, manifest, report, manifest_sha, report_sha)
     require(raw == canonical(brief), "brief.json is not in canonical form")
     require(read_safe(root, "brief.html") == render_html(brief).encode("utf-8"), "brief.html does not match brief.json")
+    return brief, recommendations
+
+
+def verify_brief(run_dir, brief_dir):
+    manifest, report, manifest_sha, report_sha = load_run(run_dir)
+    brief, recommendations = read_verified_brief(brief_dir, manifest, report, manifest_sha, report_sha)
     return {"valid": True, "run_id": manifest["run_id"], "mode": brief["mode"], "classes": len(brief["classes"]), "recommendations": recommendations,
             "assurance": "Consistent with the source run and the retained excerpts only; unsigned digests cannot authenticate a web source or the model's reasoning."}
 
