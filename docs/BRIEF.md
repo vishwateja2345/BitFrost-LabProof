@@ -144,7 +144,7 @@ One Tavily `basic` search per confirmed class, so one credit for a pack run (one
 
 Two provider facts from those runs: the Bifrost relay carried the Tavily search with only the virtual key on the client, and Bifrost v2.4.0 accepted but ignored `response_format` for the Ollama provider (Ollama honoured it when called directly), which is why `--json-mode` is opt-in.
 
-[The Docker Desktop live record](../evidence/live-brief-02) preserves the fresh direct and relayed searches, the gateway outcomes, and the validation results for each model reply.
+[The Docker Desktop live record](../evidence/live-brief-02) preserves the fresh direct and relayed searches, the gateway outcomes, and the validation results for each model reply. [The passage-ID rehearsal](../evidence/live-brief-03) records a sourced recommendation from each route.
 
 ## Tests
 

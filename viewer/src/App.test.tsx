@@ -6,7 +6,7 @@ import { LimitationsPanel } from './components/LimitationsPanel';
 import { validateBundle } from './contracts';
 import { fixture } from './test-fixture';
 import bundledReview from '../public/review.json';
-import directBrief from '../../evidence/live-brief-01/direct/brief.json';
+import directBrief from '../../evidence/live-brief-03/direct/brief.json';
 
 function mockDownload(value: unknown = fixture()) {
   const bytes = new TextEncoder().encode(JSON.stringify(value));

@@ -18,7 +18,7 @@ Visit [the local viewer](http://127.0.0.1:5173/). The saved lab review contains 
 
 ```bash
 python -m labproof verify-artifacts evidence/local-python-01
-python -m labproof verify-brief evidence/local-python-01 evidence/live-brief-01/relay
+python -m labproof verify-brief evidence/local-python-01 evidence/live-brief-03/relay
 ```
 
 ## Generate a fresh offline bundle
@@ -35,7 +35,7 @@ To include an existing brief in your own export, give its completed source run a
 
 ```bash
 python -m labproof export-viewer evidence/local-python-01 \
-  --brief evidence/live-brief-01/relay --output runs/python-review.json
+  --brief evidence/live-brief-03/relay --output runs/python-review.json
 ```
 
 ## Fresh live provider run

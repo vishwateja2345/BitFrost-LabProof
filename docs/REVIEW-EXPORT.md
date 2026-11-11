@@ -18,7 +18,7 @@ python -m labproof review-export --ledger "$work/approvals.sqlite3" redeem evide
   --task python-review --output "$work/review.json" --approval "$work/approval.json"
 ```
 
-Import the resulting `review.json` in the evidence workspace. The default lifetime is 300 seconds. Set `--ttl` on approval for a lifetime between 1 and 3,600 seconds. Use the same key and ledger for redemption. To include a brief, give the same `--brief evidence/live-brief-01/relay` option to both commands. Use `revoke --approval "$work/approval.json"` with the same ledger to revoke an unused approval.
+Import the resulting `review.json` in the evidence workspace. The default lifetime is 300 seconds. Set `--ttl` on approval for a lifetime between 1 and 3,600 seconds. Use the same key and ledger for redemption. To include a brief, give the same `--brief evidence/live-brief-03/relay` option to both commands. Use `revoke --approval "$work/approval.json"` with the same ledger to revoke an unused approval.
 
 Keep the key, ledger, and approval file under the trusted operator account. Use a local filesystem and a trusted host clock. If the verifier or file write fails after consumption, issue a fresh approval after resolving the failure. Copying or restoring the ledger to an earlier state can restore earlier approvals. The ordinary `export-viewer` command remains available to operators. Deployments that delegate this operation must give callers access only through the approved workflow.
 
