@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { validateBundle } from './contracts';
 import { fixture } from './test-fixture';
 import { LocalEvidence, RunProvenance } from './components/LocalEvidence';
+import { EvidenceComparison } from './components/EvidenceComparison';
 
 function localFixture(): Record<string, any> {
   const bundle: Record<string, any> = fixture();
@@ -28,6 +29,30 @@ describe('local-report-1 artifact support', () => {
     expect(screen.getByText('case-01')).toBeInTheDocument();
     expect(screen.getByText(/Distinct IDs alone do not establish fresh execution/)).toBeInTheDocument();
     expect(document.querySelector('script')).toBeNull();
+  });
+  it('distinguishes shared reported execution from matching capture text', () => {
+    const bundle = localFixture();
+    const report = bundle.runs[0].report;
+    const [first] = report.evidence;
+    const second = structuredClone(first);
+    second.id = second.record.id = 'second-evidence';
+    second.record.execution_id = 'second-execution';
+    report.evidence.push(second);
+    report.findings[0].evidence_ids.push(second.id);
+
+    const comparison = () => {
+      const run = validateBundle(bundle).runs[0];
+      return <EvidenceComparison run={run} item={run.report.findings![0]} onInspect={() => undefined} />;
+    };
+    const { rerender } = render(comparison());
+    expect(screen.getByText(/contain identical captured text/)).toBeInTheDocument();
+    expect(screen.queryByText(/share a reported execution ID/)).toBeNull();
+
+    second.record.execution_id = first.record.execution_id;
+    second.content = second.record.observation.raw_text = 'Different capture with the same declared digest';
+    rerender(comparison());
+    expect(screen.getByText(/share a reported execution ID/)).toBeInTheDocument();
+    expect(screen.queryByText(/contain identical captured text/)).toBeNull();
   });
   it.each([
     ['unsupported report version', (b: any) => { b.runs[0].report.schema_version = 'local-report-2'; }],

@@ -43,11 +43,12 @@ export default function App() {
   const reviewRequest = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    void openSavedReview();
+    const requested = new URLSearchParams(window.location.search).get('view');
+    void openSavedReview(views.find(({ id }) => id === requested)?.id);
     return () => reviewRequest.current?.abort();
   }, []);
 
-  async function openSavedReview() {
+  async function openSavedReview(initialView: View = 'results') {
     reviewRequest.current?.abort();
     const controller = new AbortController();
     reviewRequest.current = controller;
@@ -56,7 +57,10 @@ export default function App() {
     try {
       const response = await fetch('./review.json', { signal: controller.signal, credentials: 'omit', redirect: 'error' });
       const data = await readBundleResponse(response);
-      if (!controller.signal.aborted && loadId.current === id) activateBundle(data);
+      if (!controller.signal.aborted && loadId.current === id) {
+        activateBundle(data);
+        if (initialView !== 'remediation' || data.remediation) setView(initialView);
+      }
     } catch (reason) {
       if (!controller.signal.aborted && loadId.current === id) setError(reason instanceof Error ? reason.message : 'Could not load the saved review.');
     } finally {

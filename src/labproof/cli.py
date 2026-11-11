@@ -37,10 +37,13 @@ def main(argv=None):
     approve = review_commands.add_parser("approve", help="Sign an approval for one local export")
     redeem = review_commands.add_parser("redeem", help="Consume an approval and export the approved run")
     revoke = review_commands.add_parser("revoke", help="Revoke an unused approval")
+    close = review_commands.add_parser("close-task", help="End a task and revoke its pending export approvals")
+    close.add_argument("--task", required=True)
     for operation in (approve, redeem):
         operation.add_argument("directory", type=Path)
         operation.add_argument("--task", required=True)
         operation.add_argument("--output", type=Path, required=True)
+        operation.add_argument("--brief", type=Path, help="Include a verified remediation brief")
     approve.add_argument("--ttl", type=int, default=300, help="Approval lifetime in seconds (1–3600)")
     for operation in (redeem, revoke):
         operation.add_argument("--approval", type=Path, required=True)
@@ -66,14 +69,20 @@ def main(argv=None):
     brief.add_argument("--demo", action="store_true", help="Scripted providers and invented excerpts; no network, no credentials")
     brief.add_argument("--live", action="store_true", help="Real research and model calls; needs --confirm-outbound")
     brief.add_argument("--confirm-outbound", action="store_true", help="Consent to send the fixed queries to Tavily and public excerpts to the gateway")
-    brief.add_argument("--gateway-url", help="Bifrost origin: loopback HTTP or a remote HTTPS hostname")
-    brief.add_argument("--model", help="Bifrost model, for example provider/model")
-    brief.add_argument("--fallback", action="append", default=[], help="Requested Bifrost fallback model; repeatable, at most 3")
-    brief.add_argument("--gateway-token-env", help="Name of the environment variable holding the Bifrost virtual key")
-    brief.add_argument("--tavily-key-env", help="Name of the environment variable holding the Tavily API key")
-    brief.add_argument("--search-relay", help="Search through this Bifrost relay (the Tavily key stays in the gateway)")
-    brief.add_argument("--gateway-timeout", type=float, help="Seconds allowed per model call, 1-180 (default 60)")
-    brief.add_argument("--json-mode", action="store_true", help="Also send response_format json_object (honoured by OpenAI-compatible providers; a gateway may ignore it, a provider may reject it)")
+    freshness = commands.add_parser("freshness", help="Check a public AI answer for outdated claims")
+    freshness.add_argument("answer", type=Path)
+    freshness.add_argument("--domain", action="append", required=True, help="Trusted publisher domain, repeatable")
+    freshness.add_argument("--output", type=Path, required=True, help="New directory for HTML and JSON reports")
+    freshness.add_argument("--confirm-outbound", action="store_true", help="Send the answer to Bifrost and search terms to Tavily")
+    for command in (brief, freshness):
+        command.add_argument("--gateway-url", help="Bifrost origin: loopback HTTP or a remote HTTPS hostname")
+        command.add_argument("--model", help="Bifrost model, for example provider/model")
+        command.add_argument("--fallback", action="append", default=[], help="Requested Bifrost fallback model; repeatable, at most 3")
+        command.add_argument("--gateway-token-env", help="Name of the environment variable holding the Bifrost virtual key")
+        command.add_argument("--tavily-key-env", help="Name of the environment variable holding the Tavily API key")
+        command.add_argument("--search-relay", help="Search through this Bifrost relay (the Tavily key stays in the gateway)")
+        command.add_argument("--gateway-timeout", type=float, help="Seconds allowed per model call, 1-180 (default 60)")
+        command.add_argument("--json-mode", action="store_true", help="Also send response_format json_object (honoured by OpenAI-compatible providers; a gateway may ignore it, a provider may reject it)")
     verify_brief = commands.add_parser("verify-brief", help="Check a brief against its source run and its retained excerpts; makes no network call")
     verify_brief.add_argument("run", type=Path)
     verify_brief.add_argument("brief", type=Path)
@@ -150,15 +159,19 @@ def main(argv=None):
             print(json.dumps(export_viewer(args.directories, args.output, brief_dir=args.brief), indent=2))
             return 0
         if args.command == "review-export":
-            from .review_export import approve_export, load_key, read_approval, redeem_export, revoke_export
-            key = load_key(os.environ)
-            if args.review_command == "approve":
-                result = approve_export(args.directory, args.output, task=args.task, ledger=args.ledger, key=key, ttl=args.ttl)
-            elif args.review_command == "redeem":
-                result = redeem_export(args.directory, args.output, task=args.task, ledger=args.ledger, key=key,
-                                       approval=read_approval(args.approval))
+            from .review_export import approve_export, close_task, load_key, read_approval, redeem_export, revoke_export
+            if args.review_command == "close-task":
+                result = close_task(task=args.task, ledger=args.ledger)
             else:
-                result = revoke_export(ledger=args.ledger, key=key, approval=read_approval(args.approval))
+                key = load_key(os.environ)
+                if args.review_command == "approve":
+                    result = approve_export(args.directory, args.output, task=args.task, ledger=args.ledger,
+                                            key=key, ttl=args.ttl, brief_dir=args.brief)
+                elif args.review_command == "redeem":
+                    result = redeem_export(args.directory, args.output, task=args.task, ledger=args.ledger,
+                                           key=key, approval=read_approval(args.approval), brief_dir=args.brief)
+                else:
+                    result = revoke_export(ledger=args.ledger, key=key, approval=read_approval(args.approval))
             print(json.dumps(result, indent=2))
             return 0
         if args.command == "experiment-plan":
@@ -180,6 +193,12 @@ def main(argv=None):
             from .brief import brief_from_args
             result = brief_from_args(args, os.environ)
             print(json.dumps(result, indent=2))
+            return 0 if result["status"] == "completed" else 2
+        if args.command == "freshness":
+            from .freshness import freshness_from_args
+            result = freshness_from_args(args, os.environ)
+            print(json.dumps({"status": result["status"], "claims": len(result["claims"]),
+                              "output": str(args.output.absolute())}, indent=2))
             return 0 if result["status"] == "completed" else 2
         if args.command == "verify-brief":
             from .brief import verify_brief

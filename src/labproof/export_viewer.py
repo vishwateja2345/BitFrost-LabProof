@@ -36,13 +36,14 @@ def _check_viewer_limits(bundle):
             pending.extend((child, depth + 1) for child in value)
 
 
-def export_viewer(directories, output, *, brief_dir=None, expected_manifest=None):
+def export_viewer(directories, output, *, brief_dir=None, expected_manifest=None, expected_brief=None):
     require(type(directories) in (list, tuple) and 1 <= len(directories) <= 32, "Export requires 1–32 own run directories")
     require(expected_manifest is None or len(directories) == 1, "Snapshot export requires one source run")
     output = Path(output).absolute()
     check_no_links(output.parent)
     require(not output.exists(), "Export output already exists")
     runs, seen, remediation = [], set(), None
+    require(expected_brief is None or brief_dir is not None, "Approved brief directory required")
     if brief_dir is not None:
         brief_dir = Path(brief_dir).absolute()
         require(output != brief_dir and brief_dir not in output.parents, "Export must be outside the brief directory")
@@ -76,6 +77,7 @@ def export_viewer(directories, output, *, brief_dir=None, expected_manifest=None
                     "A brief needs a completed replay or local run")
             remediation, _ = read_verified_brief(
                 brief_dir, manifest, report, sha256(manifest_raw).hexdigest(), entries["report.json"]["sha256"],
+                expected_json=expected_brief,
             )
         runs.append({"manifest": manifest, "report": report, "events": events})
         # Bound accumulated output while loading, not only at the eventual write.

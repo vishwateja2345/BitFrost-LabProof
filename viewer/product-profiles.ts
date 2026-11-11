@@ -4,7 +4,7 @@ export const productProfiles = {
   labproof: {
     id: 'labproof', brand: 'LabProof', subtitle: 'Evidence review',
     title: 'LabProof — Evidence viewer', heading: 'Evidence workspace',
-    description: 'A read-only viewer for LabProof findings and recorded controls.',
+    description: 'Review LabProof findings, recorded controls, and cited remediation.',
     introduction: 'Review lab findings, compare controls, and trace each result to its recorded evidence.',
     search: 'Search findings or evidence', importLabel: 'LabProof', guide: 'LabProof interpretation guide',
   },

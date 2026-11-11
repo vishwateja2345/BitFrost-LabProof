@@ -18,8 +18,17 @@ Visit [the local viewer](http://127.0.0.1:5173/). The saved lab review contains 
 
 ```bash
 python -m labproof verify-artifacts evidence/local-python-01
-python -m labproof verify-brief evidence/local-python-01 evidence/live-brief-01/relay
+python -m labproof verify-brief evidence/local-python-01 evidence/live-brief-03/relay
 ```
+
+## Rehearse the evidence review
+
+Run `python scripts/rehearse-review.py` with Python 3.12 or later. It checks all four saved runs, both provider briefs, and the one-use export and task closure. It also generates a verified viewer bundle under `runs/`. [Open the saved remediation directly](http://127.0.0.1:5173/?view=remediation)
+
+## Answer freshness
+
+The [freshness walkthrough](FRESHNESS.md) checks Python support dates with both sponsors' integrations: it covers claim detection, live verification, and scoring.
+
 
 ## Generate a fresh offline bundle
 
@@ -35,7 +44,7 @@ To include an existing brief in your own export, give its completed source run a
 
 ```bash
 python -m labproof export-viewer evidence/local-python-01 \
-  --brief evidence/live-brief-01/relay --output runs/python-review.json
+  --brief evidence/live-brief-03/relay --output runs/python-review.json
 ```
 
 ## Fresh live provider run
@@ -53,6 +62,6 @@ The script sends a fixed public-guidance query to Tavily and public excerpts to 
 
 ## Hackathon scope
 
-LabProof's demo covers reproducible synthetic findings, evidence review, offline consistency checks, and sourced remediation. The Problem 03 brief also requires autonomous exploration of an organizer-provided unfamiliar target and completion of a lab objective. This demo does not establish those requirements.
+LabProof's demo covers reproducible synthetic findings, evidence review, offline consistency checks, and sourced remediation. The Problem 03 brief also requires autonomous exploration of an organizer-provided unfamiliar target and completion of a lab objective; the separate autonomous pentest agent in [`src/labproof/pentest/`](PENTEST.md) establishes that requirement against a self-contained demo lab (see its own walkthrough for a live run against a real target).
 
-Geek Room lists November 15, 2026 as the prototype deadline and November 29 as judging day. Check the signed-in event dashboard for the submission form and its required fields. [Organizer event page](https://www.geekroom.co.in/event/global-ai-hackathon) · [HackCulture event](https://hackculture.io/hackathons/ai-global-hackathon)
+Geek Room lists November 15, 2026 as the prototype deadline and November 29 as judging day. The supplied submission instructions ask for a public GitHub repository and a pitch deck. Check the signed-in dashboard for the applicable theme and final form fields. [Organizer event page](https://www.geekroom.co.in/event/global-ai-hackathon) · [HackCulture event](https://hackculture.io/hackathons/ai-global-hackathon)

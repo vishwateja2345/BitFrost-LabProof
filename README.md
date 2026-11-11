@@ -4,7 +4,7 @@
 
 LabProof answers one narrow question honestly: *did this program really leak data, and do we have the evidence to say so?* It runs purpose-built vulnerable and corrected program pairs (Python, TypeScript, C and Rust) in locked-down containers, records what they return, and reports each finding as **confirmed**, **rejected** or **inconclusive** only when the positive observations, the normal-use controls and the corrected-twin controls all agree, twice, in fresh containers. Every run is written as hash-registered artifacts that anyone can re-verify offline.
 
-It is a bounded replay/evidence harness, not a scanner: the `labproof` commands above have no input for a URL, host, port, header, payload or command, and nothing outside the fixed synthetic fixtures can be reached. Python 3.12+, standard library only. Every default command is offline and needs no credentials; the network paths are the opt-in `brief --live` (below) and the separate autonomous pentest agent in [`src/labproof/pentest/`](docs/PENTEST.md), built for the Bifrost hackathon's "agent that pentests a target on its own" problem statement — a strictly scope-bounded agent that uses real recon tools and, optionally, Bifrost-backed reasoning against hosts an operator explicitly authorizes in a scope file. See [docs/PENTEST.md](docs/PENTEST.md).
+It is a bounded replay/evidence harness, not a scanner: the `labproof` commands above have no input for a URL, host, port, header, payload or command, and nothing outside the fixed synthetic fixtures can be reached. Python 3.12+, standard library only. Every default command is offline and needs no credentials; the network paths are the opt-in `brief --live` and `freshness` commands (below) and the separate autonomous pentest agent in [`src/labproof/pentest/`](docs/PENTEST.md), built for the Bifrost hackathon's "agent that pentests a target on its own" problem statement — a strictly scope-bounded agent that uses real recon tools and, optionally, Bifrost-backed reasoning against hosts an operator explicitly authorizes in a scope file. See [docs/PENTEST.md](docs/PENTEST.md).
 
 ![LabProof viewer showing five verified runs: a replay and four real container runs](docs/screenshots/viewer-overview.png)
 
@@ -64,7 +64,9 @@ The workspace opens four saved container runs by default. Select a finding to co
 
 Use **Import bundle** to open a JSON file produced by `export-viewer` (up to 5 MiB). The file stays in your browser. **Open saved review** returns to the retained container runs. For offline consistency verification, run `verify-artifacts` against the full run directory.
 
-Use `review-export` when an operator needs to approve one specific export. The approval binds the source manifest and destination to a task and expires after a short window. [Approved export guide](docs/REVIEW-EXPORT.md)
+Use `review-export` when an operator needs to approve one specific export. The approval binds the source manifest and destination to a task and expires after a short window. [Approved export guide](docs/REVIEW-EXPORT.md) · [OMEGA research inventory](docs/OMEGA-RESEARCH.md)
+
+Use `freshness` to check a public AI answer against Tavily search results with a model served by Bifrost. [Freshness walkthrough](docs/FRESHNESS.md)
 
 The **Remediation** tab shows a retained Tavily and Bifrost brief for the Python run. To prepare a fresh offline demo, attach your own verified brief, or rehearse the walkthrough, see [docs/DEMO.md](docs/DEMO.md).
 

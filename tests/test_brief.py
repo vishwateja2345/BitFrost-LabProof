@@ -561,3 +561,44 @@ def test_a_reply_is_completed_only_when_closing_brackets_are_missing(mutate, acc
     assert len(got) == accepted and rejected == ([] if accepted else [{"reason": "reply_not_json", "text_sha256": B.digest(reply.encode("utf-8"))}])
     if accepted:
         assert got[0]["text"] == TEXT and got[0]["quotes"] == [{"source_id": "src-object_authorization-1", "quote": QUOTE["object_authorization"]}]
+
+
+def test_reply_selects_exact_saved_passage():
+    candidates = B.citation_candidates(SOURCES)
+    assert candidates["q1"]["quote"] in SOURCES[0]["excerpt"]
+    reply = json.dumps({"recommendations": [{"text": TEXT, "cite": "q1"}, {"text": TEXT, "cite": "q999"}]})
+    got, rejected = B.parse_reply(reply, SOURCES)
+    assert got == [{"text": TEXT, "quotes": [candidates["q1"]]}]
+    assert [entry["reason"] for entry in rejected] == ["invalid_quote"]
+
+
+def test_reply_accepts_only_known_ids_in_gateway_citation_lists():
+    sources = [{"id": SOURCES[0]["id"], "excerpt": " ".join(
+        f"Each separate passage contains an authorization rule numbered {index}." for index in range(1, 5)
+    )}]
+    candidates = B.citation_candidates(sources)
+    reply = json.dumps({"recommendations": [
+        {"text": TEXT, "cite": "q2, q2 q1,q3,q4"},
+        {"text": TEXT, "cite": "q1,q999"},
+    ]})
+    got, rejected = B.parse_reply(reply, sources)
+    assert got == [{"text": TEXT, "quotes": [candidates[key] for key in ("q2", "q1", "q3")]}]
+    assert [entry["reason"] for entry in rejected] == ["invalid_quote"]
+
+
+@pytest.mark.parametrize("url", [
+    "javascript://owasp.org/%0aalert(1)",
+    "javascript:alert(1)",
+    "data://owasp.org/x",
+    "vbscript://owasp.org/x",
+])
+def test_host_allowed_rejects_a_non_http_scheme_even_when_urlsplit_reports_an_allowed_hostname(url):
+    # urlsplit treats "scheme://host" as having that host regardless of the scheme, so a hostname-only
+    # check can be bypassed by a malicious search result into an href that runs script on click.
+    assert B.host_allowed(url, ["owasp.org"]) is False
+
+
+def test_host_allowed_still_accepts_ordinary_http_and_https_urls_on_reviewed_domains():
+    assert B.host_allowed("https://owasp.org/x", ["owasp.org"]) is True
+    assert B.host_allowed("http://docs.owasp.org/x", ["owasp.org"]) is True
+    assert B.host_allowed("https://evil.example/x", ["owasp.org"]) is False

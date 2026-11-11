@@ -1,7 +1,10 @@
 """Check authorization at the defensive export boundary."""
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from copy import deepcopy
+import hashlib
 import json
+import sqlite3
 from threading import Event
 
 import pytest
@@ -104,6 +107,7 @@ def test_only_one_worker_can_start_the_same_export(review, monkeypatch):
             second = workers.submit(review_export.redeem_export, **review, approval=approval)
             with pytest.raises(ValidationError, match="already used"):
                 second.result(timeout=5)
+            assert review_export.close_task(task=review["task"], ledger=review["ledger"])["revoked"] == 0
         finally:
             resume.set()
         assert first.result(timeout=5)["runs"] == 1
@@ -137,3 +141,79 @@ def test_manifest_swap_at_export_is_denied(review, monkeypatch):
     with pytest.raises(ValidationError, match="Manifest changed after export approval"):
         review_export.redeem_export(**review, approval=approval)
     assert not review["output"].exists()
+
+
+def test_export_approval_binds_remediation(review):
+    from labproof.brief import demo_clients, make_brief
+
+    brief_dir = review["output"].parent / "remediation"
+    search, gateway = demo_clients(review["root"])
+    make_brief(review["root"], brief_dir, search, gateway, mode="demo")
+    options = {**review, "brief_dir": brief_dir}
+    approval = review_export.approve_export(**options)
+    with pytest.raises(ValidationError, match="optional brief"):
+        review_export.redeem_export(**review, approval=approval)
+
+    brief = brief_dir / "brief.json"
+    original = brief.read_bytes()
+    brief.write_bytes(original + b" ")
+    with pytest.raises(ValidationError, match="optional brief"):
+        review_export.redeem_export(**options, approval=approval)
+    assert not review["output"].exists()
+
+    brief.write_bytes(original)
+    assert review_export.redeem_export(**options, approval=approval)["runs"] == 1
+    assert json.loads(review["output"].read_bytes())["remediation"] == json.loads(original)
+
+
+def test_close_task_revokes_pending_approvals_and_blocks_new_ones(review):
+    approvals = [review_export.approve_export(**review) for _ in range(2)]
+    other = {**review, "task": "another-review"}
+    unrelated = review_export.approve_export(**other)
+    closure = {"task": review["task"], "ledger": review["ledger"]}
+
+    assert review_export.close_task(**closure) == {"task_id": review["task"], "status": "closed", "revoked": 2}
+    assert review_export.close_task(**closure)["revoked"] == 0
+    with pytest.raises(ValidationError, match="task is closed"):
+        review_export.approve_export(**review)
+    for approval in approvals:
+        with pytest.raises(ValidationError, match="task is closed"):
+            review_export.redeem_export(**review, approval=approval)
+        with pytest.raises(ValidationError, match="revoked"):
+            review_export.revoke_export(ledger=review["ledger"], key=review["key"], approval=approval)
+    assert not review["output"].exists()
+    assert review_export.redeem_export(**other, approval=unrelated)["runs"] == 1
+
+
+def test_close_task_can_precede_first_approval(review):
+    assert review_export.close_task(task=review["task"], ledger=review["ledger"])["revoked"] == 0
+    with pytest.raises(ValidationError, match="task is closed"):
+        review_export.approve_export(**review)
+
+
+def test_legacy_ledger_migration_checks_signed_task_on_redeem(review):
+    legacy = review["ledger"].with_name("legacy.sqlite3")
+    other = {**review, "task": "another-review"}
+    closed_approval = review_export.approve_export(**review)
+    open_approval = review_export.approve_export(**other)
+    legacy.touch(mode=0o600)
+    with closing(sqlite3.connect(legacy)) as connection, connection:
+        connection.execute("""
+            CREATE TABLE review_approvals (
+                nonce TEXT PRIMARY KEY,
+                approval_sha256 TEXT NOT NULL,
+                expires_at INTEGER NOT NULL,
+                state TEXT NOT NULL CHECK(state IN ('approved', 'used', 'revoked'))
+            )
+        """)
+        for approval in (closed_approval, open_approval):
+            claims = approval["claims"]
+            connection.execute(
+                "INSERT INTO review_approvals VALUES (?, ?, ?, 'approved')",
+                (claims["nonce"], hashlib.sha256(canonical(approval)).hexdigest(), claims["expires_at"]),
+            )
+
+    assert review_export.close_task(task=review["task"], ledger=legacy)["revoked"] == 0
+    with pytest.raises(ValidationError, match="task is closed"):
+        review_export.redeem_export(**{**review, "ledger": legacy}, approval=closed_approval)
+    assert review_export.redeem_export(**{**other, "ledger": legacy}, approval=open_approval)["runs"] == 1
