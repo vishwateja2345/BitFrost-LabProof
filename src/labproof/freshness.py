@@ -135,7 +135,8 @@ def render_html(report):
         verdict = {"supported": "Supported", "conflicting": "Conflicting", "insufficient": "Insufficient evidence"}[row["verdict"]]
         label = "Unscored" if score is None else f"{score}/100"
         citations = []
-        for item in row["sources"]:
+        sources = sorted(row["sources"], key=lambda item: item["id"] != row["source"])
+        for item in sources:
             detail = item["published_date"] or "Publication date unavailable"
             if item["id"] == row["source"]:
                 detail += " · Selected evidence"

@@ -35,6 +35,8 @@ Review the linked excerpt to see whether the selected date refers to the claimed
 
 ## 90-second judging walkthrough
 
+[Download the Problem 06 pitch deck](pitch/LabProof-Problem-06.pptx).
+
 - **0–20 seconds.** Show the two Python claims and the official support table. Explain how an AI answer can get one support deadline wrong while the rest looks plausible.
 - **20–50 seconds.** Open the HTML result. Compare the incorrect 3.13 deadline with its selected source, then show the supported 3.14 deadline and how an undated excerpt affects the score.
 - **50–75 seconds.** Explain the provider split. Bifrost serves the model for claim selection and evidence interpretation. Tavily retrieves publisher excerpts. LabProof checks cited dates and calculates the scores.
