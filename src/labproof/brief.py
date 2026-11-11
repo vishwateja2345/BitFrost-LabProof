@@ -569,7 +569,12 @@ def brief_from_args(args, environ):
         search, gateway = demo_clients(args.run)
         return make_brief(args.run, args.output, search, gateway, mode="demo")
     require(args.confirm_outbound, "--live sends fixed queries to Tavily and public excerpts to your Bifrost gateway; add --confirm-outbound")
-    require(args.gateway_url and args.model and args.gateway_token_env, "--live needs --gateway-url, --model and --gateway-token-env")
+    search, gateway = live_clients_from_args(args, environ)
+    return make_brief(args.run, args.output, search, gateway, mode="live")
+
+
+def live_clients_from_args(args, environ):
+    require(args.gateway_url and args.model and args.gateway_token_env, "Provider access needs --gateway-url, --model and --gateway-token-env")
     require((args.tavily_key_env is None) != (args.search_relay is None), "Choose exactly one of --tavily-key-env and --search-relay")
     for name in (args.gateway_token_env, args.tavily_key_env):
         require(name is None or ENV_NAME.fullmatch(name), "Invalid environment variable name")
@@ -584,4 +589,4 @@ def brief_from_args(args, environ):
         key = environ.get(args.tavily_key_env)
         require(key, f"Environment variable {args.tavily_key_env} is not set")
         search = SearchClient(api_key=key, allow_network=True)
-    return make_brief(args.run, args.output, search, gateway, mode="live")
+    return search, gateway

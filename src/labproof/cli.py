@@ -69,14 +69,20 @@ def main(argv=None):
     brief.add_argument("--demo", action="store_true", help="Scripted providers and invented excerpts; no network, no credentials")
     brief.add_argument("--live", action="store_true", help="Real research and model calls; needs --confirm-outbound")
     brief.add_argument("--confirm-outbound", action="store_true", help="Consent to send the fixed queries to Tavily and public excerpts to the gateway")
-    brief.add_argument("--gateway-url", help="Bifrost origin: loopback HTTP or a remote HTTPS hostname")
-    brief.add_argument("--model", help="Bifrost model, for example provider/model")
-    brief.add_argument("--fallback", action="append", default=[], help="Requested Bifrost fallback model; repeatable, at most 3")
-    brief.add_argument("--gateway-token-env", help="Name of the environment variable holding the Bifrost virtual key")
-    brief.add_argument("--tavily-key-env", help="Name of the environment variable holding the Tavily API key")
-    brief.add_argument("--search-relay", help="Search through this Bifrost relay (the Tavily key stays in the gateway)")
-    brief.add_argument("--gateway-timeout", type=float, help="Seconds allowed per model call, 1-180 (default 60)")
-    brief.add_argument("--json-mode", action="store_true", help="Also send response_format json_object (honoured by OpenAI-compatible providers; a gateway may ignore it, a provider may reject it)")
+    freshness = commands.add_parser("freshness", help="Check a public AI answer for outdated claims")
+    freshness.add_argument("answer", type=Path)
+    freshness.add_argument("--domain", action="append", required=True, help="Trusted publisher domain, repeatable")
+    freshness.add_argument("--output", type=Path, required=True, help="New directory for HTML and JSON reports")
+    freshness.add_argument("--confirm-outbound", action="store_true", help="Send the answer to Bifrost and search terms to Tavily")
+    for command in (brief, freshness):
+        command.add_argument("--gateway-url", help="Bifrost origin: loopback HTTP or a remote HTTPS hostname")
+        command.add_argument("--model", help="Bifrost model, for example provider/model")
+        command.add_argument("--fallback", action="append", default=[], help="Requested Bifrost fallback model; repeatable, at most 3")
+        command.add_argument("--gateway-token-env", help="Name of the environment variable holding the Bifrost virtual key")
+        command.add_argument("--tavily-key-env", help="Name of the environment variable holding the Tavily API key")
+        command.add_argument("--search-relay", help="Search through this Bifrost relay (the Tavily key stays in the gateway)")
+        command.add_argument("--gateway-timeout", type=float, help="Seconds allowed per model call, 1-180 (default 60)")
+        command.add_argument("--json-mode", action="store_true", help="Also send response_format json_object (honoured by OpenAI-compatible providers; a gateway may ignore it, a provider may reject it)")
     verify_brief = commands.add_parser("verify-brief", help="Check a brief against its source run and its retained excerpts; makes no network call")
     verify_brief.add_argument("run", type=Path)
     verify_brief.add_argument("brief", type=Path)
@@ -158,6 +164,12 @@ def main(argv=None):
             from .brief import brief_from_args
             result = brief_from_args(args, os.environ)
             print(json.dumps(result, indent=2))
+            return 0 if result["status"] == "completed" else 2
+        if args.command == "freshness":
+            from .freshness import freshness_from_args
+            result = freshness_from_args(args, os.environ)
+            print(json.dumps({"status": result["status"], "claims": len(result["claims"]),
+                              "output": str(args.output.absolute())}, indent=2))
             return 0 if result["status"] == "completed" else 2
         if args.command == "verify-brief":
             from .brief import verify_brief

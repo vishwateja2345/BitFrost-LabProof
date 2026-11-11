@@ -66,6 +66,8 @@ Use **Import bundle** to open a JSON file produced by `export-viewer` (up to 5 M
 
 Use `review-export` when an operator needs to approve one specific export. The approval binds the source manifest and destination to a task and expires after a short window. [Approved export guide](docs/REVIEW-EXPORT.md) · [OMEGA research inventory](docs/OMEGA-RESEARCH.md)
 
+Use `freshness` to check a public AI answer against Tavily search results with a model served by Bifrost. [Freshness walkthrough](docs/FRESHNESS.md)
+
 The **Remediation** tab shows a retained Tavily and Bifrost brief for the Python run. To prepare a fresh offline demo, attach your own verified brief, or rehearse the walkthrough, see [docs/DEMO.md](docs/DEMO.md).
 
 ### Running the language packs yourself
