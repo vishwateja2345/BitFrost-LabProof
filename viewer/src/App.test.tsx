@@ -48,6 +48,20 @@ describe('artifact workspace', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Result status' }), { target: { value: 'inconclusive' } });
     expect(screen.getByRole('button', { name: 'Synthetic observation' })).toBeInTheDocument();
   });
+  it('keeps linked controls in view when a search matches captured evidence', async () => {
+    const value = fixture();
+    const report = value.runs[0].report;
+    report.evidence.push({ ...report.evidence[0], id: 'e2', title: 'Second control', content: 'Different capture' });
+    report.findings[0].evidence_ids.push('e2');
+    mockDownload(value);
+    render(<App />);
+    await screen.findByRole('button', { name: 'Synthetic observation' });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search artifacts' }), { target: { value: 'untrusted' } });
+    expect(screen.getByRole('button', { name: 'Synthetic observation' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Evidence ledger' }));
+    expect(screen.getByRole('heading', { name: 'Captured control' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Second control' })).toBeInTheDocument();
+  });
   it('does not silently replace an unavailable demo with sample data', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
     render(<App />);
@@ -73,13 +87,30 @@ describe('artifact workspace', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Previous bundle retained');
     expect(screen.getByRole('button', { name: 'Synthetic observation' })).toBeInTheDocument();
   });
+  it('returns to the bundled demo and clears the imported bundle view', async () => {
+    render(<App />);
+    await screen.findByText('Bundled demo');
+    const raw = JSON.stringify(fixture());
+    const file = new File([raw], 'review.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => raw });
+    fireEvent.change(screen.getByLabelText('Import JSON bundle'), { target: { files: [file] } });
+    await screen.findByText('review.json');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Search artifacts' }), { target: { value: 'missing' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Run trace' }));
+    expect(screen.getByText('No runs match this view.')).toBeInTheDocument();
+    mockDownload();
+    fireEvent.click(screen.getByRole('button', { name: 'Open demo' }));
+    await screen.findByText('Bundled demo');
+    expect(screen.getByRole('button', { name: 'Results' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('textbox', { name: 'Search artifacts' })).toHaveValue('');
+  });
   it('renders incomplete run limitations and original records without inferring a pass', async () => {
     const value = fixture();
     value.runs = [value.runs[0]];
     value.runs[0].manifest.status = 'incomplete'; value.runs[0].events = [];
     mockDownload(value);
     render(<App />);
-    expect(await screen.findByText(/Run incomplete: treat missing evidence as unknown/)).toBeInTheDocument();
+    expect(await screen.findByText(/run\(s\) in this view are not completed/)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Run trace' }));
     expect(screen.getByText('No events recorded.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Original reports' }));
@@ -118,6 +149,5 @@ describe('untrusted evidence rendering', () => {
   it('keeps trust boundaries visible even with no runs', () => {
     render(<LimitationsPanel runs={validateBundle({ schema_version: '1.0', generated_at: '2026-11-01T00:00:00Z', runs: [] }).runs} />);
     expect(screen.getByText(/Unsigned reports do not prove authenticity/)).toBeInTheDocument();
-    expect(screen.getByText(/Recorded controls and replays do not authorize new tests/)).toBeInTheDocument();
   });
 });

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from .contracts import (ID_RE, SHA_RE, MAX_FILES, ValidationError, canonical, check_no_links,
                         parse_json, read_safe, require, strings, timestamp, validate_manifest)
-from .policy import Action, Check, Limits, PHASES, VARIANTS
+from .policy import Action, Limits, PHASES, VARIANTS
 from .report import adjudicate, replay_narrative
 from .transport import Response
 

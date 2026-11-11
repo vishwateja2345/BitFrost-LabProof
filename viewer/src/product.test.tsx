@@ -50,8 +50,8 @@ describe('LabProof viewer', () => {
     expect(screen.getByRole('heading', { name: 'Synthetic observation' })).toBeInTheDocument();
     expect(screen.getByText('Bundled demo')).toBeInTheDocument();
     upload(fixture());
-    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument());
-    expect(screen.getByText('import.json')).toBeInTheDocument();
+    expect(await screen.findByText('import.json')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
   it('loads actual blocked LabProof v2 and retains it on unknown-version or false-completion imports', async () => {
     preload(actualBlocked); render(<App />);
