@@ -1,5 +1,6 @@
 """Comparison over invented verified runs; no live/runtime claim."""
 from copy import deepcopy
+import tempfile
 
 import pytest
 
@@ -39,6 +40,22 @@ def test_blocked_experiments_not_comparable(tmp_path, monkeypatch):
     assert main(["compare-experiments", str(before), str(after), "--output", str(output)]) == 0
     assert main(["compare-experiments", str(before), str(after), "--output", str(output)]) == 1
     assert main(["compare-experiments", str(before), str(after), "--output", str(before / "extra.json")]) == 1
+
+
+def test_comparison_tolerates_an_aliased_temp_root(tmp_path, monkeypatch):
+    """macOS keeps its temp root behind /var -> /private/var; the private scratch copy must still verify."""
+    plan = mock_session(tmp_path, monkeypatch)
+    before, after = tmp_path / "before", tmp_path / "after"
+    local_engine.run_experiments(before, plan)
+    local_engine.run_experiments(after, plan)
+    real, alias = tmp_path / "real-temp", tmp_path / "alias-temp"
+    real.mkdir()
+    try:
+        alias.symlink_to(real, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation is unavailable")
+    monkeypatch.setattr(tempfile, "tempdir", str(alias))
+    assert compare_experiments(before, after)["status"] == "comparable"
 
 
 def test_comparison_rejects_tampered_inputs(tmp_path, monkeypatch):

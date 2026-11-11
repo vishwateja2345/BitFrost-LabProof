@@ -179,6 +179,9 @@ def verify_artifacts(root):
         if manifest["mode"] == "local":
             from .verify_local import verify_local
             return verify_local(root)
+        if manifest["mode"] == "live":
+            from .pentest.verify import verify_pentest
+            return verify_pentest(root)
         return _verify(root)
     except ValidationError:
         raise
