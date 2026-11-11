@@ -1,5 +1,6 @@
 """Small embedded contract validator; no sibling-package dependency."""
 from datetime import datetime
+import errno
 import json
 from math import isfinite
 import os
@@ -12,6 +13,8 @@ MAX_RUN_BYTES = 8_000_000
 MAX_FILES = 128
 ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,100}$")
 SHA_RE = re.compile(r"^[a-f0-9]{64}$")
+_NOFOLLOW_TRAVERSAL = (os.open in os.supports_dir_fd and hasattr(os, "O_DIRECTORY")
+                       and hasattr(os, "O_NOFOLLOW"))
 
 
 class ValidationError(ValueError):
@@ -99,13 +102,46 @@ def check_no_links(path: Path):
             raise ValidationError(_link_message(item))
 
 
+def _open_artifact(target: Path) -> int:
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NONBLOCK", 0)
+    if not _NOFOLLOW_TRAVERSAL:
+        return os.open(target, flags)
+
+    target = target.absolute()
+    search = getattr(os, "O_SEARCH", getattr(os, "O_PATH", os.O_RDONLY))
+    directory_flags = search | os.O_DIRECTORY | os.O_NOFOLLOW
+    directory = os.open(target.anchor, directory_flags)
+    try:
+        for name in target.parts[1:-1]:
+            child = os.open(name, directory_flags, dir_fd=directory)
+            os.close(directory)
+            directory = child
+        return os.open(target.name, flags | os.O_NOFOLLOW, dir_fd=directory)
+    except OSError as exc:
+        if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+            raise ValidationError("Artifact path changed or contains a link") from exc
+        raise
+    finally:
+        os.close(directory)
+
+
 def read_safe(root: Path, relative: str) -> bytes:
     parts = safe_relative(relative)
     target = root.joinpath(*parts)
     check_no_links(target)
-    require(target.is_file(), "Artifact is not a regular file")
-    require(target.stat().st_size <= MAX_FILE_BYTES, "Artifact size limit exceeded")
-    with target.open("rb") as stream:
+    expected = target.lstat()
+    require(stat.S_ISREG(expected.st_mode) and not _is_link(expected), "Artifact is not a regular file")
+    require(expected.st_size <= MAX_FILE_BYTES, "Artifact size limit exceeded")
+    with os.fdopen(_open_artifact(target), "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        require(stat.S_ISREG(opened.st_mode), "Artifact is not a regular file")
+        require(os.path.samestat(expected, opened), "Artifact changed before reading")
+        if not _NOFOLLOW_TRAVERSAL:
+            # Platforms without directory-relative no-follow opens can only
+            # recheck the path and compare its identity with the open file.
+            check_no_links(target)
+            require(os.path.samestat(target.lstat(), opened), "Artifact changed before reading")
+        require(opened.st_size <= MAX_FILE_BYTES, "Artifact size limit exceeded")
         raw = stream.read(MAX_FILE_BYTES + 1)
     require(len(raw) <= MAX_FILE_BYTES, "Artifact grew beyond size limit")
     return raw

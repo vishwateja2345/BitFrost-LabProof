@@ -63,8 +63,12 @@ def _claims(key, approval):
     return claims
 
 
-def _paths(root, output, ledger, task):
+def _validate_task_id(task):
     require(isinstance(task, str) and ID_RE.fullmatch(task) is not None, "Invalid review task ID")
+
+
+def _paths(root, output, ledger, task):
+    _validate_task_id(task)
     root, output, ledger = (Path(path).absolute() for path in (root, output, ledger))
     require(all(".." not in path.parts for path in (root, output, ledger)), "Use paths without parent traversal")
     require(not output.is_relative_to(root) and not ledger.is_relative_to(root) and output != ledger,
@@ -94,6 +98,7 @@ def _bound_arguments(root, output, manifest, brief_dir, brief):
 @contextmanager
 def _ledger(path, *, create=False):
     path = Path(path).absolute()
+    require(".." not in path.parts, "Use paths without parent traversal")
     if create:
         check_no_links(path.parent)
         try:
@@ -115,12 +120,27 @@ def _ledger(path, *, create=False):
                         nonce TEXT PRIMARY KEY,
                         approval_sha256 TEXT NOT NULL,
                         expires_at INTEGER NOT NULL,
-                        state TEXT NOT NULL CHECK(state IN ('approved', 'used', 'revoked'))
+                        state TEXT NOT NULL CHECK(state IN ('approved', 'used', 'revoked')),
+                        task_id TEXT
                     )
                 """)
+            columns = {row[1] for row in connection.execute("PRAGMA table_info(review_approvals)")}
+            require(columns, "Approval ledger is unavailable or invalid")
+            if "task_id" not in columns:
+                # Legacy rows contain only a digest. Check their signed task on redemption.
+                connection.execute("ALTER TABLE review_approvals ADD COLUMN task_id TEXT")
+            connection.execute("CREATE TABLE IF NOT EXISTS review_closed_tasks (task_id TEXT PRIMARY KEY NOT NULL)")
+            connection.execute("""
+                CREATE INDEX IF NOT EXISTS review_pending_task ON review_approvals(task_id) WHERE state = 'approved'
+            """)
             yield connection
     except sqlite3.Error as exc:
         raise ValidationError("Approval ledger is unavailable or invalid") from exc
+
+
+def _require_open_task(connection, task):
+    closed = connection.execute("SELECT 1 FROM review_closed_tasks WHERE task_id = ?", (task,)).fetchone()
+    require(closed is None, "Review task is closed")
 
 
 def approve_export(root, output, *, task, ledger, key, ttl=300, brief_dir=None):
@@ -132,6 +152,7 @@ def approve_export(root, output, *, task, ledger, key, ttl=300, brief_dir=None):
     validate_manifest(manifest)
     require(manifest["mode"] in ("replay", "local"), "Approval supports replay and local runs")
     with _ledger(ledger, create=True) as connection:
+        _require_open_task(connection, task)
         claims = {
             "schema_version": SCHEMA, "task_id": task, "action": ACTION, "phase": PHASE,
             "args_sha256": _bound_arguments(root, output, raw, brief_dir, brief),
@@ -139,8 +160,8 @@ def approve_export(root, output, *, task, ledger, key, ttl=300, brief_dir=None):
         }
         approval = {"claims": claims, "signature": _signature(key, claims)}
         connection.execute(
-            "INSERT INTO review_approvals VALUES (?, ?, ?, 'approved')",
-            (claims["nonce"], _sha(canonical(approval)), claims["expires_at"]),
+            "INSERT INTO review_approvals (nonce, approval_sha256, expires_at, state, task_id) VALUES (?, ?, ?, 'approved', ?)",
+            (claims["nonce"], _sha(canonical(approval)), claims["expires_at"], task),
         )
     return approval
 
@@ -148,6 +169,7 @@ def approve_export(root, output, *, task, ledger, key, ttl=300, brief_dir=None):
 def _transition(ledger, approval, claims, state):
     with _ledger(ledger) as connection:
         if state == "used":
+            _require_open_task(connection, claims["task_id"])
             require(int(time.time()) < claims["expires_at"], "Export approval expired")
         changed = connection.execute(
             "UPDATE review_approvals SET state = ? WHERE nonce = ? AND approval_sha256 = ? AND state = 'approved'",
@@ -172,3 +194,14 @@ def revoke_export(*, ledger, key, approval):
     claims = _claims(key, approval)
     _transition(ledger, approval, claims, "revoked")
     return {"task_id": claims["task_id"], "status": "revoked"}
+
+
+def close_task(*, task, ledger):
+    _validate_task_id(task)
+    with _ledger(ledger, create=True) as connection:
+        connection.execute("INSERT OR IGNORE INTO review_closed_tasks (task_id) VALUES (?)", (task,))
+        revoked = connection.execute(
+            "UPDATE review_approvals SET state = 'revoked' WHERE task_id = ? AND state = 'approved'",
+            (task,),
+        ).rowcount
+    return {"task_id": task, "status": "closed", "revoked": revoked}

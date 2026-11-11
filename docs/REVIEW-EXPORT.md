@@ -1,6 +1,6 @@
 # Approved export of verified evidence
 
-`review-export` gives a trusted local operator a way to approve one viewer export. The approval binds the task ID, the source run's absolute path and exact manifest bytes, the output path, the action, and the expiry. When provided, it also binds the absolute brief directory and exact `brief.json` bytes. A SQLite ledger serializes use and revocation, including across separate processes. The command consumes the approval before invoking the verifier and creating the JSON bundle.
+`review-export` gives a trusted local operator a way to approve one viewer export. The approval binds the task ID, the source run's absolute path and exact manifest bytes, the output path, the action, and the expiry. When provided, it also binds the absolute brief directory and exact `brief.json` bytes. A SQLite ledger serializes use, revocation, and task closure across separate processes. The command consumes the approval before invoking the verifier and creating the JSON bundle.
 
 From the repository root, with LabProof installed:
 
@@ -19,6 +19,14 @@ python -m labproof review-export --ledger "$work/approvals.sqlite3" redeem evide
 ```
 
 Import the resulting `review.json` in the evidence workspace. The default lifetime is 300 seconds. Set `--ttl` on approval for a lifetime between 1 and 3,600 seconds. Use the same key and ledger for redemption. To include a brief, give the same `--brief evidence/live-brief-03/relay` option to both commands. Use `revoke --approval "$work/approval.json"` with the same ledger to revoke an unused approval.
+
+Close the task when review ends.
+
+```bash
+python -m labproof review-export --ledger "$work/approvals.sqlite3" close-task --task python-review
+```
+
+Task closure is permanent within the ledger. It rejects new approvals and blocks redemption of earlier approvals for that task. Closure and redemption compete for the same transaction. An export whose approval was consumed before closure can still finish. The JSON response reports how many pending approvals the ledger marked revoked. Approvals issued by earlier versions have no task column and are blocked at redemption using their signed task ID.
 
 Keep the key, ledger, and approval file under the trusted operator account. Use a local filesystem and a trusted host clock. If the verifier or file write fails after consumption, issue a fresh approval after resolving the failure. Copying or restoring the ledger to an earlier state can restore earlier approvals. The ordinary `export-viewer` command remains available to operators. Deployments that delegate this operation must give callers access only through the approved workflow.
 

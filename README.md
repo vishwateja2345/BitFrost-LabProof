@@ -64,7 +64,7 @@ The workspace opens four saved container runs by default. Select a finding to co
 
 Use **Import bundle** to open a JSON file produced by `export-viewer` (up to 5 MiB). The file stays in your browser. **Open saved review** returns to the retained container runs. For offline consistency verification, run `verify-artifacts` against the full run directory.
 
-Use `review-export` when an operator needs to approve one specific export. The approval binds the source manifest and destination to a task and expires after a short window. [Approved export guide](docs/REVIEW-EXPORT.md)
+Use `review-export` when an operator needs to approve one specific export. The approval binds the source manifest and destination to a task and expires after a short window. [Approved export guide](docs/REVIEW-EXPORT.md) · [OMEGA research inventory](docs/OMEGA-RESEARCH.md)
 
 The **Remediation** tab shows a retained Tavily and Bifrost brief for the Python run. To prepare a fresh offline demo, attach your own verified brief, or rehearse the walkthrough, see [docs/DEMO.md](docs/DEMO.md).
 

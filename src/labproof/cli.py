@@ -37,6 +37,8 @@ def main(argv=None):
     approve = review_commands.add_parser("approve", help="Sign an approval for one local export")
     redeem = review_commands.add_parser("redeem", help="Consume an approval and export the approved run")
     revoke = review_commands.add_parser("revoke", help="Revoke an unused approval")
+    close = review_commands.add_parser("close-task", help="End a task and revoke its pending export approvals")
+    close.add_argument("--task", required=True)
     for operation in (approve, redeem):
         operation.add_argument("directory", type=Path)
         operation.add_argument("--task", required=True)
@@ -122,15 +124,19 @@ def main(argv=None):
             print(json.dumps(export_viewer(args.directories, args.output, brief_dir=args.brief), indent=2))
             return 0
         if args.command == "review-export":
-            from .review_export import approve_export, load_key, read_approval, redeem_export, revoke_export
-            key = load_key(os.environ)
-            if args.review_command == "approve":
-                result = approve_export(args.directory, args.output, task=args.task, ledger=args.ledger, key=key, ttl=args.ttl, brief_dir=args.brief)
-            elif args.review_command == "redeem":
-                result = redeem_export(args.directory, args.output, task=args.task, ledger=args.ledger, key=key,
-                                       approval=read_approval(args.approval), brief_dir=args.brief)
+            from .review_export import approve_export, close_task, load_key, read_approval, redeem_export, revoke_export
+            if args.review_command == "close-task":
+                result = close_task(task=args.task, ledger=args.ledger)
             else:
-                result = revoke_export(ledger=args.ledger, key=key, approval=read_approval(args.approval))
+                key = load_key(os.environ)
+                if args.review_command == "approve":
+                    result = approve_export(args.directory, args.output, task=args.task, ledger=args.ledger,
+                                            key=key, ttl=args.ttl, brief_dir=args.brief)
+                elif args.review_command == "redeem":
+                    result = redeem_export(args.directory, args.output, task=args.task, ledger=args.ledger,
+                                           key=key, approval=read_approval(args.approval), brief_dir=args.brief)
+                else:
+                    result = revoke_export(ledger=args.ledger, key=key, approval=read_approval(args.approval))
             print(json.dumps(result, indent=2))
             return 0
         if args.command == "experiment-plan":

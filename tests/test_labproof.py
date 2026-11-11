@@ -8,6 +8,7 @@ from hashlib import sha256
 
 import pytest
 
+from labproof import contracts
 from labproof.cli import main
 from labproof.contracts import ValidationError, canonical, parse_json, safe_relative
 from labproof.engine import run_demo
@@ -332,6 +333,56 @@ def test_duplicate_json_and_nonfinite():
     for value in [b'{"a":1,"a":2}', b'{"a":NaN}', b'{"a":Infinity}', b'{"a":1e999}', b'\xff']:
         with pytest.raises(ValidationError):
             parse_json(value)
+
+
+@pytest.mark.skipif(not contracts._NOFOLLOW_TRAVERSAL, reason="Directory-relative no-follow opens unavailable")
+@pytest.mark.parametrize("swap", ["file", "directory", "fifo"])
+def test_artifact_rejects_path_replaced_before_open(tmp_path, monkeypatch, swap):
+    root = tmp_path / "run"
+    parent = root / "evidence"
+    parent.mkdir(parents=True)
+    target = parent / "sample.json"
+    target.write_text("inside")
+    outside = tmp_path / "outside"
+    outside.mkdir()
+    (outside / target.name).write_text("outside")
+
+    real_open = os.open
+
+    def replace_before_open(path, flags, *args, **kwargs):
+        if swap == "directory" and path == parent.name:
+            parent.rename(root / "original")
+            parent.symlink_to(outside, target_is_directory=True)
+        if swap != "directory" and path == target.name:
+            target.rename(parent / "original.json")
+            if swap == "fifo":
+                os.mkfifo(target)
+                assert flags & os.O_NONBLOCK
+            else:
+                target.symlink_to(outside / target.name)
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(os, "open", replace_before_open)
+    with pytest.raises(ValidationError, match="contains a link|not a regular file"):
+        contracts.read_safe(root, "evidence/sample.json")
+
+
+def test_artifact_fallback_rejects_changed_file_identity(tmp_path, monkeypatch):
+    target = tmp_path / "sample.json"
+    target.write_text("original")
+    replacement = tmp_path / "replacement.json"
+    replacement.write_text("replacement")
+    real_open = os.open
+
+    def replace_before_open(path, flags, *args, **kwargs):
+        if path == target:
+            replacement.replace(target)
+        return real_open(path, flags, *args, **kwargs)
+
+    monkeypatch.setattr(contracts, "_NOFOLLOW_TRAVERSAL", False)
+    monkeypatch.setattr(os, "open", replace_before_open)
+    with pytest.raises(ValidationError, match="Artifact changed before reading"):
+        contracts.read_safe(tmp_path, target.name)
 
 
 def test_symlink_rejected(run, tmp_path):
